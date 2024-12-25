@@ -6,17 +6,19 @@
        CONFIGURATION SECTION.
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
+           SELECT OUTPUT-FILE ASSIGN TO "output.txt"
+               ORGANIZATION IS LINE SEQUENTIAL.
 
        DATA DIVISION.
        FILE SECTION.
+           FD  OUTPUT-FILE.
+           01  OUTPUT-RECORD           PIC X(1024).
 
        WORKING-STORAGE SECTION.
        01  WS-ACCOUNT-NUMBER     PIC X(10).
        01  WS-SQL-COMMAND        PIC X(500).
        01  WS-SHELL-COMMAND      PIC X(600).
        01  WS-RETURN-CODE        PIC S9(4) COMP.
-       *> 01  WS-PROCESS-OUTPUT     PIC X(1024).
-       *> 01  WS-PROCESS-OUTPUT      USAGE POINTER.
        01  WS-PROCESS-OUTPUT        PIC S9(18) COMP.
        01  WS-PROCESS-OUTPUT-RECORD PIC X(1024).
        01  WS-END-OF-FILE        PIC X VALUE 'N'.
@@ -40,28 +42,26 @@
 
            DISPLAY "Executing: " WS-SHELL-COMMAND.
 
-           *> Open a pipe to read the output of the shell command
-           CALL "popen" USING WS-SHELL-COMMAND, "r"
-               RETURNING WS-PROCESS-OUTPUT.
+           *> Execute the command
+           CALL "SYSTEM" USING WS-SHELL-COMMAND
+               RETURNING WS-RETURN-CODE.
 
-           IF WS-PROCESS-OUTPUT = 0
+           IF WS-RETURN-CODE NOT = 0
                DISPLAY "Error executing psql command. Return code: " WS-RETURN-CODE
-               MOVE "Y" TO WS-END-OF-FILE
                GOBACK
            END-IF.
 
-           DISPLAY "Transaction History:"
+           *> Read and display the output
+           OPEN INPUT OUTPUT-FILE
            PERFORM UNTIL WS-END-OF-FILE = "Y"
-               DISPLAY "Simulated transaction output line."
-               MOVE "Y" TO WS-END-OF-FILE
+               READ OUTPUT-FILE INTO OUTPUT-RECORD
+                   AT END
+                       MOVE "Y" TO WS-END-OF-FILE
+                   NOT AT END
+                       DISPLAY OUTPUT-RECORD
+               END-READ
            END-PERFORM.
-
-           *> Close the pipe
-           *> CALL "pclose" USING WS-PROCESS-OUTPUT
-           *>    RETURNING WS-RETURN-CODE.
-
-           *> Close the pipe (not needed for `SYSTEM` but keeping structure)
-           DISPLAY "Completed reading transactions."
+           CLOSE OUTPUT-FILE.
 
            GOBACK.
 
