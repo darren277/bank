@@ -34,11 +34,7 @@
 
            *> Construct the shell command to execute psql and capture output
            *> STRING "psql -d banking_db -c \"" WS-SQL-COMMAND "\" -t -A"
-           STRING "PGPASSWORD=mypassword psql -U myusername -d bank -c " 
-                  WS-DOUBLE-QUOTE 
-                  WS-SQL-COMMAND 
-                  WS-DOUBLE-QUOTE
-                  " -t -A"
+           STRING "PGPASSWORD=mypassword psql -U myusername -d bank -c " WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND) WS-DOUBLE-QUOTE " -t -A > output.txt"
               INTO WS-SHELL-COMMAND
               END-STRING.
 
