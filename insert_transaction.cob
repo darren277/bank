@@ -14,6 +14,7 @@
        01  WS-ACCOUNT-NUMBER     PIC X(10).
        01  WS-TRANS-TYPE         PIC X(1).
        01  WS-AMOUNT             PIC 9(15)V99.
+       01  WS-AMOUNT-FORMATTED   PIC ZZZZZZZZZZZZZ9.99.
        01  WS-SQL-COMMAND        PIC X(500).
        01  WS-SHELL-COMMAND      PIC X(600).
        01  WS-RETURN-CODE        PIC S9(4) COMP.
@@ -30,6 +31,8 @@
            DISPLAY "Enter Transaction Amount:"
            ACCEPT WS-AMOUNT
 
+           MOVE WS-AMOUNT TO WS-AMOUNT-FORMATTED.
+
            *> Construct the SQL command
            STRING 
                "INSERT INTO transactions (account_number, transaction_type, amount) "
@@ -38,7 +41,7 @@
                "', '" DELIMITED BY SIZE
                WS-TRANS-TYPE DELIMITED BY SIZE
                "', " DELIMITED BY SIZE
-               WS-AMOUNT DELIMITED BY SIZE
+               WS-AMOUNT-FORMATTED DELIMITED BY SIZE
                ");" DELIMITED BY SIZE
            INTO WS-SQL-COMMAND
            END-STRING.
