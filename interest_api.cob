@@ -26,39 +26,42 @@
 
        PROCEDURE DIVISION.
        MAIN-PARA.
-           PERFORM GET-ENVIRONMENT
+           PERFORM GET-ENVIRONMENT-PARA
            IF WS-REQUEST-METHOD = "GET"
-               PERFORM HANDLE-GET
-           ELSE
+               PERFORM HANDLE-GET-PARA
+           ELSE 
                IF WS-REQUEST-METHOD = "POST"
-                   PERFORM HANDLE-POST
+                   PERFORM HANDLE-POST-PARA
                ELSE
-                   PERFORM SEND-ERROR "Unsupported HTTP Method."
+                   MOVE "Unsupported HTTP Method." TO WS-ERROR-MESSAGE
+                   PERFORM SEND-ERROR-PARA
                END-IF
            END-IF
            GOBACK.
 
-       GET-ENVIRONMENT.
-           ACCEPT WS-REQUEST-METHOD FROM ENVIRONMENT "REQUEST_METHOD".
+       GET-ENVIRONMENT-PARA.
+           ACCEPT WS-REQUEST-METHOD FROM ENVIRONMENT "REQUEST_METHOD"
            ACCEPT WS-QUERY-STRING FROM ENVIRONMENT "QUERY_STRING".
 
-       HANDLE-GET.
-           *> Example: /cgi-bin/interest_api.cgi?principal=1000&rate=0.05&time=2&account=1234567890
-           PERFORM PARSE-QUERY-STRING
-           PERFORM CALCULATE-INTEREST
-           PERFORM RECORD-TRANSACTION
-           PERFORM SEND-JSON-RESPONSE.
+       HANDLE-GET-PARA.
+           *> Example: /cgi-bin/interest_api.cgi?
+           *> principal=1000&rate=0.05&time=2&account=1234567890
+           PERFORM PARSE-QUERY-STRING-PARA
+           PERFORM CALCULATE-INTEREST-PARA
+           PERFORM RECORD-TRANSACTION-PARA
+           PERFORM SEND-JSON-RESPONSE-PARA.
 
-       HANDLE-POST.
+       HANDLE-POST-PARA.
            *> Handle POST data from standard input
-           PERFORM READ-POST-DATA
-           PERFORM PARSE-POST-DATA
-           PERFORM CALCULATE-INTEREST
-           PERFORM RECORD-TRANSACTION
-           PERFORM SEND-JSON-RESPONSE.
+           PERFORM READ-POST-DATA-PARA
+           PERFORM PARSE-POST-DATA-PARA
+           PERFORM CALCULATE-INTEREST-PARA
+           PERFORM RECORD-TRANSACTION-PARA
+           PERFORM SEND-JSON-RESPONSE-PARA.
 
-       PARSE-QUERY-STRING.
-           *> Simple parser: assumes query string format is principal=XXX&rate=YYY&time=ZZZ&account=AAAA
+       PARSE-QUERY-STRING-PARA.
+           *> Simple parser: assumes query string format is
+           *> principal=XXX&rate=YYY&time=ZZZ&account=AAAA
            UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
                WS-PRINCIPAL
                WS-RATE
@@ -71,20 +74,20 @@
                9.                   *> Skip "account="
            *> Note: This is a simplistic parser and doesn't handle URL encoding or errors.
 
-       READ-POST-DATA.
+       READ-POST-DATA-PARA.
            *> Read Content-Length to know how much to read from stdin
            ACCEPT WS-RESPONSE FROM ENVIRONMENT "CONTENT_LENGTH".
            *> Read the POST data (assuming it's in the format principal=XXX&rate=YYY&time=ZZZ&account=AAAA)
            ACCEPT WS-QUERY-STRING FROM CONSOLE.
 
-       PARSE-POST-DATA.
-           PERFORM PARSE-QUERY-STRING.
+       PARSE-POST-DATA-PARA.
+           PERFORM PARSE-QUERY-STRING-PARA.
 
-       CALCULATE-INTEREST.
+       CALCULATE-INTEREST-PARA.
            *> Compound interest: A = P * (1 + r)^t
            COMPUTE WS-INTEREST = WS-PRINCIPAL * FUNCTION EXP ( FUNCTION LOG (1.0 + WS-RATE ) * WS-TIME ) - WS-PRINCIPAL.
 
-       RECORD-TRANSACTION.
+       RECORD-TRANSACTION-PARA.
            *> Insert the interest as a transaction (assuming 'D' for deposit)
            STRING "INSERT INTO transactions (account_number, transaction_type, amount) "
                "VALUES ('" WS-ACCOUNT-NUMBER "', 'D', " WS-INTEREST ");"
@@ -99,11 +102,11 @@
                RETURNING WS-RETURN-CODE.
 
            IF WS-RETURN-CODE NOT = 0
-               PERFORM SEND-ERROR "Error recording transaction."
+               PERFORM SEND-ERROR-PARA "Error recording transaction."
                STOP RUN
            END-IF.
 
-       SEND-JSON-RESPONSE.
+       SEND-JSON-RESPONSE-PARA.
            STRING
                "{""principal"": " WS-PRINCIPAL
                ", ""rate"": " WS-RATE
@@ -118,7 +121,7 @@
                INTO WS-RESPONSE.
            DISPLAY WS-RESPONSE.
 
-       SEND-ERROR.
+       SEND-ERROR-PARA.
            *> Display HTTP error response
            DISPLAY "Content-Type: text/plain"
            DISPLAY
