@@ -6,9 +6,13 @@
        CONFIGURATION SECTION.
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
+           SELECT PSQL-RESULT-FILE ASSIGN TO "./psql_result.tmp"
+           ORGANIZATION IS LINE SEQUENTIAL.
 
        DATA DIVISION.
        FILE SECTION.
+       FD  PSQL-RESULT-FILE.
+       01  PSQL-RESULT-RECORD    PIC X.
 
        WORKING-STORAGE SECTION.
        01  WS-REQUEST-METHOD      PIC X(10).
@@ -39,6 +43,7 @@
        01  WS-DOUBLE-QUOTE        PIC X(1) VALUE '"'.
        01  WS-ACCOUNT-EXISTS      PIC X VALUE 'N'.
        01  WS-START-POS          PIC 9(4).
+       01  WS-PSQL-RESULT        PIC X.
 
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -162,7 +167,7 @@
                  INTO WS-SQL-COMMAND-CHECK.
            
            STRING "PGPASSWORD=mypassword psql -U myusername -d bank -c "
-                 WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND-CHECK) WS-DOUBLE-QUOTE " -t -A"
+                 WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND-CHECK) WS-DOUBLE-QUOTE " -t -A > ./psql_result.tmp"
                  INTO WS-SHELL-COMMAND.
            
            DISPLAY "Executing: " WS-SHELL-COMMAND.
@@ -171,7 +176,29 @@
                RETURNING WS-RETURN-CODE.
 
            IF WS-RETURN-CODE = 0
-               ACCEPT WS-ACCOUNT-EXISTS FROM CONSOLE
+               OPEN INPUT PSQL-RESULT-FILE
+               READ PSQL-RESULT-FILE INTO WS-PSQL-RESULT
+                   AT END MOVE "N" TO WS-PSQL-RESULT
+               END-READ
+               CLOSE PSQL-RESULT-FILE
+               
+               *> Debug the exact content
+               DISPLAY "Raw PSQL Result: [" WS-PSQL-RESULT "]"
+               
+               *> Trim any spaces and check
+               MOVE FUNCTION TRIM(WS-PSQL-RESULT) TO WS-PSQL-RESULT
+               DISPLAY "Trimmed PSQL Result: [" WS-PSQL-RESULT "]"
+               
+               IF WS-PSQL-RESULT = "Y"
+                   MOVE "Y" TO WS-ACCOUNT-EXISTS
+               ELSE
+                   MOVE "N" TO WS-ACCOUNT-EXISTS
+               END-IF
+               
+               *> Clean up temp file
+               *> STRING "rm ./psql_result.tmp" 
+               *>     INTO WS-SHELL-COMMAND
+               *> CALL "SYSTEM" USING WS-SHELL-COMMAND
            ELSE
                MOVE 'N' TO WS-ACCOUNT-EXISTS
            END-IF.
