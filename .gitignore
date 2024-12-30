@@ -10,3 +10,6 @@ get_transactions_odbc
 .env
 
 output.txt
+
+*.cgi
+psql_result.tmp
