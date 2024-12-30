@@ -176,6 +176,37 @@ int get_transactions(const char* account_number, char* output, int max_len) {
     char buffer[256];
     int len = 0;
 
+    fprintf(stderr, "Debug: account_number='%s', max_len=%d\n", account_number ? account_number : "(null)", max_len);
+    fprintf(stderr, "Debug: Initial output buffer='%s'\n", output);
+
+    fprintf(stderr, "Debug: Received account_number='%s'\n", account_number ? account_number : "(null)");
+    fprintf(stderr, "Debug: Max length for output=%d\n", max_len);
+    fprintf(stderr, "Debug: Initial output buffer='%s'\n", output);
+
+    fprintf(stderr, "Debug: account_number pointer=%p\n", account_number);
+    if (account_number) {
+        fprintf(stderr, "Debug: Received account_number='%s', length=%zu\n", account_number, strlen(account_number));
+    } else {
+        fprintf(stderr, "Error: account_number is NULL\n");
+    }
+
+    // Check account_number validity
+    if (!account_number || strlen(account_number) == 0) {
+        fprintf(stderr, "Error: Invalid account_number. Exiting.\n");
+        return -1;
+    }
+
+    fprintf(stderr, "Debug: Raw account_number memory: ");
+    for (int i = 0; i < 11; i++) {  // Adjust length as needed
+        fprintf(stderr, "%02x ", ((unsigned char*)account_number)[i]);
+    }
+    fprintf(stderr, "\n");
+
+    if (!account_number || strlen(account_number) > 10) {  // Max length check
+        fprintf(stderr, "Error: Invalid account_number length\n");
+        return -1;
+    }
+
     // Initialize ODBC environment
     SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
     SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
@@ -183,11 +214,15 @@ int get_transactions(const char* account_number, char* output, int max_len) {
     // Allocate connection handle
     SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc);
 
+    fprintf(stderr, "Debug: SQL query='%s'\n", query);
+
     // Connect to data source
     ret = SQLConnect(dbc, (SQLCHAR*)"BankingDB", SQL_NTS,
                      (SQLCHAR*)"myusername", SQL_NTS,
                      (SQLCHAR*)"mypassword", SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        fprintf(stderr, "Error connecting to database.\n");
+
         // Handle connection error
         SQLFreeHandle(SQL_HANDLE_DBC, dbc);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
@@ -203,8 +238,12 @@ int get_transactions(const char* account_number, char* output, int max_len) {
              account_number);
 
     // Execute SQL statement
+    fprintf(stderr, "Debug: Executing SQL query: %s\n", query);
+
     ret = SQLExecDirect(stmt, (SQLCHAR*)query, SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        fprintf(stderr, "Error executing query. SQLRETURN=%d\n", ret);
+
         // Handle execution error
         SQLFreeHandle(SQL_HANDLE_STMT, stmt);
         SQLDisconnect(dbc);
@@ -213,30 +252,50 @@ int get_transactions(const char* account_number, char* output, int max_len) {
         return -2;
     }
 
+    // Initialize output buffer with empty string
+    output[0] = '\0';
+    len = 0;
+
     // Fetch and concatenate results
+    fprintf(stderr, "Debug: Fetching results...\n");
+
     while ((ret = SQLFetch(stmt)) != SQL_NO_DATA) {
         if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO) {
+            fprintf(stderr, "Debug: Fetching row...\n");
+
             SQLINTEGER transaction_id;
             char transaction_type[2];
             double amount;
             char timestamp[30];
-
-            SQLGetData(stmt, 1, SQL_C_SLONG, &transaction_id, 0, NULL);
-            SQLGetData(stmt, 2, SQL_C_CHAR, transaction_type, sizeof(transaction_type), NULL);
-            SQLGetData(stmt, 3, SQL_C_DOUBLE, &amount, 0, NULL);
-            SQLGetData(stmt, 4, SQL_C_CHAR, timestamp, sizeof(timestamp), NULL);
+            SQLLEN indicator;
+            
+            // Get data with proper length indicators
+            SQLGetData(stmt, 1, SQL_C_SLONG, &transaction_id, 0, &indicator);
+            SQLGetData(stmt, 2, SQL_C_CHAR, transaction_type, sizeof(transaction_type), &indicator);
+            SQLGetData(stmt, 3, SQL_C_DOUBLE, &amount, 0, &indicator);
+            SQLGetData(stmt, 4, SQL_C_CHAR, timestamp, sizeof(timestamp), &indicator);
 
             // Format the output
-            snprintf(buffer, sizeof(buffer), "ID: %d, Type: %s, Amount: %.2lf, Time: %s\n",
-                     transaction_id, transaction_type, amount, timestamp);
+            int written = snprintf(buffer, sizeof(buffer), 
+                "ID: %d, Type: %s, Amount: %.2f, Time: %s\n",
+                transaction_id, transaction_type, amount, timestamp);
 
-            // Append to output
-            strncat(output, buffer, max_len - len - 1);
-            len += strlen(buffer);
-
-            if (len >= max_len - 1) {
+            // Check if we have enough space left
+            if (len + written >= max_len - 1) {
+                fprintf(stderr, "Warning: Output buffer full\n");
                 break;
             }
+
+            // Copy to output buffer
+            memcpy(output + len, buffer, written);
+            len += written;
+
+            // Ensure null termination
+            output[len] = '\0';
+
+            fprintf(stderr, "Debug: Current buffer length: %d\n", len);
+            fprintf(stderr, "Fetched Row: ID=%d, Type='%s', Amount=%.2f, Time='%s'\n",
+                    transaction_id, transaction_type, amount, timestamp);
         }
     }
 
