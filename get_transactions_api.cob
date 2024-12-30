@@ -37,7 +37,8 @@
            ACCEPT WS-QUERY-STRING FROM ENVIRONMENT "QUERY_STRING".
 
        HANDLE-GET-PARA.
-           *> Example: /cgi-bin/get_transactions_api.cgi?account=1234567890
+           *> Example:
+           *> /cgi-bin/get_transactions_api.cgi?account=1234567890
            PERFORM PARSE-QUERY-STRING-PARA
            PERFORM RETRIEVE-TRANSACTIONS-PARA
            PERFORM SEND-JSON-RESPONSE-PARA.
@@ -51,8 +52,11 @@
 
        RETRIEVE-TRANSACTIONS-PARA.
            *> Construct the SQL command
-           STRING "SELECT transaction_id, transaction_type, amount, timestamp "
-               "FROM transactions WHERE account_number = '" WS-ACCOUNT-NUMBER "';"
+           STRING
+               "SELECT transaction_id, transaction_type, "
+               "amount, timestamp "
+               "FROM transactions WHERE account_number = '"
+               WS-ACCOUNT-NUMBER "';"
                INTO WS-SQL-COMMAND.
 
            *> Construct the shell command
@@ -75,7 +79,8 @@
                INTO WS-RESPONSE.
 
            PERFORM UNTIL WS-END-OF-FILE = "Y"
-               CALL "fgets" USING WS-PROCESS-OUTPUT-RECORD, 1024, WS-OUTPUT
+               CALL "fgets" USING
+                   WS-PROCESS-OUTPUT-RECORD, 1024, WS-OUTPUT
                    RETURNING WS-PROCESS-OUTPUT-RECORD.
                IF WS-PROCESS-OUTPUT-RECORD = NULL
                    MOVE "Y" TO WS-END-OF-FILE
@@ -84,7 +89,8 @@
                        STRING "," INTO WS-RESPONSE.
                    END-IF
                    *> Parse the record
-                   UNSTRING WS-PROCESS-OUTPUT-RECORD DELIMITED BY "|" INTO
+                   UNSTRING WS-PROCESS-OUTPUT-RECORD
+                       DELIMITED BY "|" INTO
                        WS-TRANSACTION-ID
                        WS-TRANSACTION-TYPE
                        WS-AMOUNT
@@ -112,8 +118,11 @@
            STRING "]" INTO WS-RESPONSE.
 
        SEND-JSON-RESPONSE-PARA.
-           STRING "Content-Type: application/json" CRLF
-               "Content-Length: " FUNCTION LENGTH(WS-RESPONSE) CRLF
+           STRING
+               "Content-Type: application/json"
+               CRLF
+               "Content-Length: " FUNCTION LENGTH(WS-RESPONSE)
+               CRLF
                CRLF
                WS-RESPONSE
                INTO WS-RESPONSE.
