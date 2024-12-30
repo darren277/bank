@@ -21,6 +21,8 @@
        01  WS-OUTPUT              PIC X(1024).
        01  WS-END-OF-FILE         PIC X VALUE 'N'.
        01  WS-PROCESS-OUTPUT-RECORD PIC X(1024).
+       01  CRLF                   PIC X(2) VALUE X"0D0A".
+       01  WS-DOUBLE-QUOTE        PIC X(1) VALUE '"'.
 
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -60,7 +62,9 @@
                INTO WS-SQL-COMMAND.
 
            *> Construct the shell command
-           STRING "psql -d banking_db -c \"" WS-SQL-COMMAND "\" -t -A"
+           STRING
+               "psql -d banking_db -c "
+               WS-DOUBLE-QUOTE WS-SQL-COMMAND WS-DOUBLE-QUOTE " -t -A"
                INTO WS-SHELL-COMMAND.
 
            DISPLAY "Executing: " WS-SHELL-COMMAND.
@@ -99,10 +103,16 @@
                        3   *> Assuming transaction_id is up to 3 digits
 
                    *> Construct JSON object
-                   STRING "{""id"": " WS-TRANSACTION-ID
-                       ", ""type"": """ WS-TRANSACTION-TYPE """"
-                       ", ""amount"": " WS-AMOUNT
-                       ", ""timestamp"": """ WS-TIMESTAMP """}"
+                   STRING
+                       "{" WS-DOUBLE-QUOTE "id" WS-DOUBLE-QUOTE ":"
+                       WS-DOUBLE-QUOTE WS-TRANSACTION-ID WS-DOUBLE-QUOTE
+                       ", " WS-DOUBLE-QUOTE "type" WS-DOUBLE-QUOTE ": "
+                       WS-DOUBLE-QUOTE WS-TRANSACTION-TYPE
+                       WS-DOUBLE-QUOTE ", " WS-DOUBLE-QUOTE
+                       "amount" WS-DOUBLE-QUOTE ": " WS-AMOUNT
+                       ", " WS-DOUBLE-QUOTE "timestamp" WS-DOUBLE-QUOTE
+                       ": " WS-DOUBLE-QUOTE WS-TIMESTAMP WS-DOUBLE-QUOTE
+                       "}"
                        INTO WS-JSON-OBJECT.
 
                    *> Append to JSON array
@@ -131,7 +141,7 @@
        SEND-ERROR-PARA.
            *> Display HTTP error response
            DISPLAY "Content-Type: text/plain"
-           DISPLAY
+           DISPLAY CRLF
            DISPLAY "Error: " WS-RESPONSE.
            STOP RUN.
 
