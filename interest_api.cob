@@ -33,6 +33,9 @@
        01  WS-RETURN-CODE         PIC S9(4) COMP.
        01  WS-JSON-RESPONSE       PIC X(256).
        01  WS-ACCOUNT-NUMBER      PIC X(10).
+       01  WS-ERROR-MESSAGE       PIC X(100).
+       01  CRLF                   PIC X(2) VALUE X"0D0A".
+       01  WS-DOUBLE-QUOTE        PIC X(1) VALUE '"'.
 
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -130,7 +133,9 @@
                INTO WS-SQL-COMMAND.
 
            *> Construct the shell command
-           STRING "psql -d banking_db -c \"" WS-SQL-COMMAND "\""
+           STRING
+               "psql -d banking_db -c "
+               WS-DOUBLE-QUOTE WS-SQL-COMMAND WS-DOUBLE-QUOTE
                INTO WS-SHELL-COMMAND.
 
            *> Execute the shell command
@@ -138,8 +143,8 @@
                RETURNING WS-RETURN-CODE.
 
            IF WS-RETURN-CODE NOT = 0
-               PERFORM SEND-ERROR-PARA "Error recording transaction."
-               STOP RUN
+               MOVE "Error recording transaction." TO WS-ERROR-MESSAGE
+               PERFORM SEND-ERROR-PARA
            END-IF.
 
        SEND-JSON-RESPONSE-PARA.
@@ -150,8 +155,11 @@
                ", ""interest"": " WS-INTEREST
                "}"
                INTO WS-JSON-RESPONSE.
-           STRING "Content-Type: application/json" CRLF
-               "Content-Length: " FUNCTION LENGTH(WS-JSON-RESPONSE) CRLF
+           STRING
+               "Content-Type: application/json"
+               CRLF
+               "Content-Length: " FUNCTION LENGTH(WS-JSON-RESPONSE)
+               CRLF
                CRLF
                WS-JSON-RESPONSE
                INTO WS-RESPONSE.
@@ -160,6 +168,6 @@
        SEND-ERROR-PARA.
            *> Display HTTP error response
            DISPLAY "Content-Type: text/plain"
-           DISPLAY
-           DISPLAY "Error: " WS-RESPONSE.
+           DISPLAY CRLF
+           DISPLAY "Error: " WS-ERROR-MESSAGE
            STOP RUN.
