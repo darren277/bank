@@ -17,6 +17,16 @@
        01  WS-PRINCIPAL           PIC 9(15)V99.
        01  WS-RATE                PIC 9(5)V9999.
        01  WS-TIME                PIC 9(5).
+       01  WS-POINTERS.
+           05 WS-P-PRINCIPAL      PIC 9(2) VALUE 10.  *> Length of "principal="
+           05 WS-P-RATE          PIC 9(2) VALUE 5.   *> Length of "rate="
+           05 WS-P-TIME          PIC 9(2) VALUE 5.   *> Length of "time="
+           05 WS-P-ACCOUNT       PIC 9(2) VALUE 8.   *> Length of "account="
+       01  WS-TEMP.
+           05 WS-TEMP-PRINCIPAL   PIC X(20).
+           05 WS-TEMP-RATE       PIC X(20).
+           05 WS-TEMP-TIME       PIC X(20).
+           05 WS-TEMP-ACCOUNT    PIC X(20).
        01  WS-INTEREST            PIC 9(15)V99.
        01  WS-SQL-COMMAND         PIC X(500).
        01  WS-SHELL-COMMAND       PIC X(600).
@@ -63,15 +73,31 @@
            *> Simple parser: assumes query string format is
            *> principal=XXX&rate=YYY&time=ZZZ&account=AAAA
            UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
+               WS-TEMP-PRINCIPAL
+               WS-TEMP-RATE
+               WS-TEMP-TIME
+               WS-TEMP-ACCOUNT.
+           
+           *> Extract actual values by removing prefixes
+           UNSTRING WS-TEMP-PRINCIPAL DELIMITED BY "=" INTO
+               WS-TEMP-PRINCIPAL
                WS-PRINCIPAL
+               WITH POINTER WS-P-PRINCIPAL.
+           
+           UNSTRING WS-TEMP-RATE DELIMITED BY "=" INTO
+               WS-TEMP-RATE
                WS-RATE
+               WITH POINTER WS-P-RATE.
+           
+           UNSTRING WS-TEMP-TIME DELIMITED BY "=" INTO
+               WS-TEMP-TIME
                WS-TIME
+               WITH POINTER WS-P-TIME.
+           
+           UNSTRING WS-TEMP-ACCOUNT DELIMITED BY "=" INTO
+               WS-TEMP-ACCOUNT
                WS-ACCOUNT-NUMBER
-           WITH POINTER
-               11
-               6
-               5
-               9.
+               WITH POINTER WS-P-ACCOUNT.
        *> Skip "principal="
        *> Skip "rate="
        *> Skip "time="
