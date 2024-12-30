@@ -40,7 +40,8 @@
            IF WS-REQUEST-METHOD = "GET"
                PERFORM HANDLE-GET-PARA
            ELSE
-               PERFORM SEND-ERROR-PARA "Unsupported HTTP Method."
+               MOVE "Unsupported HTTP Method." TO WS-ERROR-MESSAGE
+               PERFORM SEND-ERROR-PARA
            END-IF
            GOBACK.
 
@@ -58,9 +59,9 @@
        PARSE-QUERY-STRING-PARA.
            *> Simple parser: assumes query string format is account=AAAA
            UNSTRING WS-QUERY-STRING DELIMITED BY "=" INTO
+               WS-TEMP-ACCOUNT
                WS-ACCOUNT-NUMBER
-           WITH POINTER
-               8.  *> Skip "account="
+               WITH POINTER WS-P-ACCOUNT.
 
        RETRIEVE-TRANSACTIONS-PARA.
            *> Construct the SQL command
@@ -80,62 +81,56 @@
            DISPLAY "Executing: " WS-SHELL-COMMAND.
 
            *> Open a pipe to read the output of the shell command
-           CALL "popen" USING WS-SHELL-COMMAND, "r"
-               RETURNING WS-OUTPUT.
+           CALL "SYSTEM" USING WS-SHELL-COMMAND
+               RETURNING WS-RETURN-CODE.
 
-           IF WS-OUTPUT = NULL
-               PERFORM SEND-ERROR-PARA "Error executing psql command."
-               STOP RUN
+           IF WS-RETURN-CODE NOT = 0
+               MOVE "Error executing psql command." TO WS-ERROR-MESSAGE
+               PERFORM SEND-ERROR-PARA
            END-IF.
 
            *> Initialize JSON array
-           STRING "["
-               INTO WS-RESPONSE.
+           MOVE "[" TO WS-RESPONSE.
 
-           PERFORM UNTIL WS-END-OF-FILE = "Y"
-               CALL "fgets" USING
-                   WS-PROCESS-OUTPUT-RECORD, 1024, WS-OUTPUT
-                   RETURNING WS-PROCESS-OUTPUT-RECORD.
-               IF WS-PROCESS-OUTPUT-RECORD = NULL
-                   MOVE "Y" TO WS-END-OF-FILE
-               ELSE
-                   IF WS-RESPONSE NOT = "["
-                       STRING "," INTO WS-RESPONSE.
-                   END-IF
-                   *> Parse the record
-                   UNSTRING WS-PROCESS-OUTPUT-RECORD
-                       DELIMITED BY "|" INTO
-                       WS-TRANSACTION-ID
-                       WS-TRANSACTION-TYPE
-                       WS-AMOUNT
-                       WS-TIMESTAMP
-                   WITH POINTER
-                       3   *> Assuming transaction_id is up to 3 digits
-
-                   *> Construct JSON object
-                   STRING
-                       "{" WS-DOUBLE-QUOTE "id" WS-DOUBLE-QUOTE ":"
-                       WS-DOUBLE-QUOTE WS-TRANSACTION-ID WS-DOUBLE-QUOTE
-                       ", " WS-DOUBLE-QUOTE "type" WS-DOUBLE-QUOTE ": "
-                       WS-DOUBLE-QUOTE WS-TRANSACTION-TYPE
-                       WS-DOUBLE-QUOTE ", " WS-DOUBLE-QUOTE
-                       "amount" WS-DOUBLE-QUOTE ": " WS-AMOUNT
-                       ", " WS-DOUBLE-QUOTE "timestamp" WS-DOUBLE-QUOTE
-                       ": " WS-DOUBLE-QUOTE WS-TIMESTAMP WS-DOUBLE-QUOTE
-                       "}"
-                       INTO WS-JSON-OBJECT.
-
-                   *> Append to JSON array
-                   STRING WS-RESPONSE WS-JSON-OBJECT INTO WS-RESPONSE.
-               END-IF
-           END-PERFORM.
-
-           *> Close the pipe
-           CALL "pclose" USING WS-OUTPUT
-               RETURNING WS-RETURN-CODE.
+           PERFORM PROCESS-RECORDS-PARA
+               UNTIL WS-END-OF-FILE = "Y".
 
            *> Close JSON array
            STRING "]" INTO WS-RESPONSE.
+       
+       PROCESS-RECORDS-PARA.
+           ACCEPT WS-PROCESS-OUTPUT-RECORD FROM CONSOLE
+           IF WS-PROCESS-OUTPUT-RECORD = SPACES
+               MOVE "Y" TO WS-END-OF-FILE
+           ELSE
+               IF WS-RESPONSE NOT = "["
+                   STRING "," INTO WS-RESPONSE
+               END-IF
+
+               *> Parse the record
+               UNSTRING WS-PROCESS-OUTPUT-RECORD
+                   DELIMITED BY "|" INTO
+                   WS-TRANSACTION-ID
+                   WS-TRANSACTION-TYPE
+                   WS-AMOUNT
+                   WS-TIMESTAMP
+    
+               *> Construct JSON object
+               STRING
+                   "{" WS-DOUBLE-QUOTE "id" WS-DOUBLE-QUOTE ":"
+                   WS-DOUBLE-QUOTE WS-TRANSACTION-ID WS-DOUBLE-QUOTE
+                   ", " WS-DOUBLE-QUOTE "type" WS-DOUBLE-QUOTE ": "
+                   WS-DOUBLE-QUOTE WS-TRANSACTION-TYPE
+                   WS-DOUBLE-QUOTE ", " WS-DOUBLE-QUOTE
+                   "amount" WS-DOUBLE-QUOTE ": " WS-AMOUNT
+                   ", " WS-DOUBLE-QUOTE "timestamp" WS-DOUBLE-QUOTE
+                   ": " WS-DOUBLE-QUOTE WS-TIMESTAMP WS-DOUBLE-QUOTE
+                   "}"
+                   INTO WS-JSON-OBJECT
+    
+               *> Append to JSON array
+               STRING WS-RESPONSE WS-JSON-OBJECT INTO WS-RESPONSE
+           END-IF.
 
        SEND-JSON-RESPONSE-PARA.
            STRING
@@ -154,10 +149,3 @@
            DISPLAY CRLF
            DISPLAY "Error: " WS-RESPONSE.
            STOP RUN.
-
-       *> Additional working storage for JSON construction
-       01  WS-TRANSACTION-ID      PIC 9(5).
-       01  WS-TRANSACTION-TYPE    PIC X(1).
-       01  WS-AMOUNT              PIC 9(15)V99.
-       01  WS-TIMESTAMP           PIC X(30).
-       01  WS-JSON-OBJECT         PIC X(256).
