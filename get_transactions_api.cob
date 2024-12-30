@@ -24,32 +24,32 @@
 
        PROCEDURE DIVISION.
        MAIN-PARA.
-           PERFORM GET-ENVIRONMENT
+           PERFORM GET-ENVIRONMENT-PARA
            IF WS-REQUEST-METHOD = "GET"
-               PERFORM HANDLE-GET
+               PERFORM HANDLE-GET-PARA
            ELSE
-               PERFORM SEND-ERROR "Unsupported HTTP Method."
+               PERFORM SEND-ERROR-PARA "Unsupported HTTP Method."
            END-IF
            GOBACK.
 
-       GET-ENVIRONMENT.
+       GET-ENVIRONMENT-PARA.
            ACCEPT WS-REQUEST-METHOD FROM ENVIRONMENT "REQUEST_METHOD".
            ACCEPT WS-QUERY-STRING FROM ENVIRONMENT "QUERY_STRING".
 
-       HANDLE-GET.
+       HANDLE-GET-PARA.
            *> Example: /cgi-bin/get_transactions_api.cgi?account=1234567890
-           PERFORM PARSE-QUERY-STRING
-           PERFORM RETRIEVE-TRANSACTIONS
-           PERFORM SEND-JSON-RESPONSE.
+           PERFORM PARSE-QUERY-STRING-PARA
+           PERFORM RETRIEVE-TRANSACTIONS-PARA
+           PERFORM SEND-JSON-RESPONSE-PARA.
 
-       PARSE-QUERY-STRING.
+       PARSE-QUERY-STRING-PARA.
            *> Simple parser: assumes query string format is account=AAAA
            UNSTRING WS-QUERY-STRING DELIMITED BY "=" INTO
                WS-ACCOUNT-NUMBER
            WITH POINTER
                8.  *> Skip "account="
 
-       RETRIEVE-TRANSACTIONS.
+       RETRIEVE-TRANSACTIONS-PARA.
            *> Construct the SQL command
            STRING "SELECT transaction_id, transaction_type, amount, timestamp "
                "FROM transactions WHERE account_number = '" WS-ACCOUNT-NUMBER "';"
@@ -66,7 +66,7 @@
                RETURNING WS-OUTPUT.
 
            IF WS-OUTPUT = NULL
-               PERFORM SEND-ERROR "Error executing psql command."
+               PERFORM SEND-ERROR-PARA "Error executing psql command."
                STOP RUN
            END-IF.
 
@@ -111,7 +111,7 @@
            *> Close JSON array
            STRING "]" INTO WS-RESPONSE.
 
-       SEND-JSON-RESPONSE.
+       SEND-JSON-RESPONSE-PARA.
            STRING "Content-Type: application/json" CRLF
                "Content-Length: " FUNCTION LENGTH(WS-RESPONSE) CRLF
                CRLF
@@ -119,7 +119,7 @@
                INTO WS-RESPONSE.
            DISPLAY WS-RESPONSE.
 
-       SEND-ERROR.
+       SEND-ERROR-PARA.
            *> Display HTTP error response
            DISPLAY "Content-Type: text/plain"
            DISPLAY
