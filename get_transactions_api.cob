@@ -23,6 +23,16 @@
        01  WS-PROCESS-OUTPUT-RECORD PIC X(1024).
        01  CRLF                   PIC X(2) VALUE X"0D0A".
        01  WS-DOUBLE-QUOTE        PIC X(1) VALUE '"'.
+       01  WS-ERROR-MESSAGE       PIC X(100).
+       01  WS-POINTERS.
+           05 WS-P-ACCOUNT        PIC 9(2) VALUE 8.
+       01  WS-TRANSACTION-DATA.
+           05  WS-TRANSACTION-ID   PIC 9(5).
+           05  WS-TRANSACTION-TYPE PIC X(1).
+           05  WS-AMOUNT          PIC 9(15)V99.
+           05  WS-TIMESTAMP       PIC X(30).
+       01  WS-JSON-OBJECT         PIC X(256).
+       01  WS-TEMP-ACCOUNT        PIC X(20).
 
        PROCEDURE DIVISION.
        MAIN-PARA.
