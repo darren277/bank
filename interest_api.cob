@@ -68,16 +68,22 @@
                WS-TIME
                WS-ACCOUNT-NUMBER
            WITH POINTER
-               11                   *> Skip "principal="
-               6                    *> Skip "rate="
-               5                    *> Skip "time="
-               9.                   *> Skip "account="
-           *> Note: This is a simplistic parser and doesn't handle URL encoding or errors.
+               11
+               6
+               5
+               9.
+       *> Skip "principal="
+       *> Skip "rate="
+       *> Skip "time="
+       *> Skip "account="
+       *> Note: This is a simplistic parser
+       *> and doesn't handle URL encoding or errors.
 
        READ-POST-DATA-PARA.
            *> Read Content-Length to know how much to read from stdin
            ACCEPT WS-RESPONSE FROM ENVIRONMENT "CONTENT_LENGTH".
-           *> Read the POST data (assuming it's in the format principal=XXX&rate=YYY&time=ZZZ&account=AAAA)
+           *> Read the POST data (assuming it's in the format
+           *> principal=XXX&rate=YYY&time=ZZZ&account=AAAA)
            ACCEPT WS-QUERY-STRING FROM CONSOLE.
 
        PARSE-POST-DATA-PARA.
@@ -85,11 +91,15 @@
 
        CALCULATE-INTEREST-PARA.
            *> Compound interest: A = P * (1 + r)^t
-           COMPUTE WS-INTEREST = WS-PRINCIPAL * FUNCTION EXP ( FUNCTION LOG (1.0 + WS-RATE ) * WS-TIME ) - WS-PRINCIPAL.
+           COMPUTE WS-INTEREST = WS-PRINCIPAL *
+               FUNCTION EXP ( FUNCTION LOG (1.0 + WS-RATE ) * WS-TIME )
+               - WS-PRINCIPAL.
 
        RECORD-TRANSACTION-PARA.
-           *> Insert the interest as a transaction (assuming 'D' for deposit)
-           STRING "INSERT INTO transactions (account_number, transaction_type, amount) "
+           *> Insert the interest as a transaction
+           *> (assuming 'D' for deposit)
+           STRING "INSERT INTO transactions (account_number, "
+               "transaction_type, amount) "
                "VALUES ('" WS-ACCOUNT-NUMBER "', 'D', " WS-INTEREST ");"
                INTO WS-SQL-COMMAND.
 
