@@ -134,7 +134,7 @@
 
            *> Construct the shell command
            STRING
-               "psql -d banking_db -c "
+               "PGPASSWORD=mypassword psql -U myusername -d bank -c "
                WS-DOUBLE-QUOTE WS-SQL-COMMAND WS-DOUBLE-QUOTE
                INTO WS-SHELL-COMMAND.
 
