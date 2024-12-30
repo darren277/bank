@@ -35,10 +35,10 @@ void print_odbc_error(SQLHANDLE handle, SQLSMALLINT type) {
     SQLSMALLINT i = 1;
     SQLINTEGER native_error;
     SQLSMALLINT msg_len;
-
+    
     while (SQLGetDiagRec(type, handle, i, sqlstate, &native_error,
                         message, sizeof(message), &msg_len) == SQL_SUCCESS) {
-        fprintf(stderr, "ODBC Error:\n");
+        fprintf(stderr, "ODBC Error at position %d:\n", i);
         fprintf(stderr, "  SQLSTATE: %s\n", sqlstate);
         fprintf(stderr, "  Native Error: %ld\n", (long)native_error);
         fprintf(stderr, "  Message: %s\n", message);
@@ -68,70 +68,94 @@ int insert_transaction(char* account_number, char* trans_type, unsigned char* pa
         return -1;
     }
     
-    SQLHENV env;
-    SQLHDBC dbc;
-    SQLHSTMT stmt;
+    SQLHENV env = SQL_NULL_HANDLE;
+    SQLHDBC dbc = SQL_NULL_HANDLE;
+    SQLHSTMT stmt = SQL_NULL_HANDLE;
     SQLRETURN ret;
     char query[256];
 
+    fprintf(stderr, "Debug: Initializing ODBC environment...\n");
+
     // Initialize ODBC environment
-    if (SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env) != SQL_SUCCESS) {
+    ret = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &env);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         fprintf(stderr, "Error: Failed to allocate ODBC environment handle.\n");
+        print_odbc_error(SQL_HANDLE_ENV, env);
         return -1;
     }
-    SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
 
-    // Allocate connection handle
-    if (SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc) != SQL_SUCCESS) {
-        fprintf(stderr, "Error: Failed to allocate ODBC connection handle.\n");
+    fprintf(stderr, "Debug: Setting ODBC version...\n");
+    
+    ret = SQLSetEnvAttr(env, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        fprintf(stderr, "Error: Failed to set ODBC version.\n");
+        print_odbc_error(SQL_HANDLE_ENV, env);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         return -1;
     }
 
-    // Connect to data source // BankingDB
-    ret = SQLConnect(dbc, (SQLCHAR*)"BankingDB", SQL_NTS,
-                     (SQLCHAR*)"myusername", SQL_NTS,
-                     (SQLCHAR*)"mypassword", SQL_NTS);
+    fprintf(stderr, "Debug: Allocating connection handle...\n");
+    
+    // Allocate connection handle
+    ret = SQLAllocHandle(SQL_HANDLE_DBC, env, &dbc);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        fprintf(stderr, "Error: Failed to allocate ODBC connection handle.\n");
+        print_odbc_error(SQL_HANDLE_ENV, env);
+        SQLFreeHandle(SQL_HANDLE_ENV, env);
+        return -1;
+    }
+
+    fprintf(stderr, "Debug: Attempting database connection...\n");
+
+    // Connect to data source
+    ret = SQLConnect(dbc, 
+                    (SQLCHAR*)"BankingDB", SQL_NTS,
+                    (SQLCHAR*)"myusername", SQL_NTS,
+                    (SQLCHAR*)"mypassword", SQL_NTS);
+                    
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
         fprintf(stderr, "Error: Failed to connect to the database.\n");
+        print_odbc_error(SQL_HANDLE_DBC, dbc);
         SQLFreeHandle(SQL_HANDLE_DBC, dbc);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         return -1;
     }
 
+    fprintf(stderr, "Debug: Connected to database. Allocating statement handle...\n");
+    
     // Allocate statement handle
-    if (SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt) != SQL_SUCCESS) {
-        fprintf(stderr, "Error: Failed to allocate SQL statement handle.\n");
+    ret = SQLAllocHandle(SQL_HANDLE_STMT, dbc, &stmt);
+    if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
+        fprintf(stderr, "Error: Failed to allocate statement handle.\n");
+        print_odbc_error(SQL_HANDLE_DBC, dbc);
         SQLDisconnect(dbc);
         SQLFreeHandle(SQL_HANDLE_DBC, dbc);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         return -1;
     }
 
-    // Prepare SQL statement
-    if (amount < 0) {
-        fprintf(stderr, "Error: Invalid amount (negative): %.2f\n", amount);
-        return -1;
-    }
-
+    fprintf(stderr, "Debug: Preparing SQL query...\n");
+    
     snprintf(query, sizeof(query),
-             "INSERT INTO transactions (account_number, transaction_type, amount) VALUES ('%s', '%s', %lf);",
+             "INSERT INTO transactions (account_number, transaction_type, amount) "
+             "VALUES ('%s', '%s', %lf);",
              account_number, trans_type, amount);
 
-    // Execute SQL statement
+    fprintf(stderr, "Debug: Executing SQL query: %s\n", query);
+    
     // Execute SQL statement
     ret = SQLExecDirect(stmt, (SQLCHAR*)query, SQL_NTS);
     if (ret != SQL_SUCCESS && ret != SQL_SUCCESS_WITH_INFO) {
-        fprintf(stderr, "Error: Failed to execute SQL query: %s\n", query);
+        fprintf(stderr, "Error: Failed to execute SQL query.\n");
         print_odbc_error(SQL_HANDLE_STMT, stmt);
-        print_odbc_error(SQL_HANDLE_DBC, dbc);
-        print_odbc_error(SQL_HANDLE_ENV, env);
         SQLFreeHandle(SQL_HANDLE_STMT, stmt);
         SQLDisconnect(dbc);
         SQLFreeHandle(SQL_HANDLE_DBC, dbc);
         SQLFreeHandle(SQL_HANDLE_ENV, env);
         return -1;
     }
+
+    fprintf(stderr, "Debug: Query executed successfully. Cleaning up...\n");
 
     // Clean up
     SQLFreeHandle(SQL_HANDLE_STMT, stmt);
