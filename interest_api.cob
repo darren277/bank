@@ -1,0 +1,126 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. INTEREST-API.
+       AUTHOR. DARREN-MACKENZIE.
+
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+
+       DATA DIVISION.
+       FILE SECTION.
+
+       WORKING-STORAGE SECTION.
+       01  WS-REQUEST-METHOD      PIC X(10).
+       01  WS-QUERY-STRING        PIC X(256).
+       01  WS-RESPONSE            PIC X(2048).
+       01  WS-PRINCIPAL           PIC 9(15)V99.
+       01  WS-RATE                PIC 9(5)V9999.
+       01  WS-TIME                PIC 9(5).
+       01  WS-INTEREST            PIC 9(15)V99.
+       01  WS-SQL-COMMAND         PIC X(500).
+       01  WS-SHELL-COMMAND       PIC X(600).
+       01  WS-RETURN-CODE         PIC S9(4) COMP.
+       01  WS-JSON-RESPONSE       PIC X(256).
+       01  WS-ACCOUNT-NUMBER      PIC X(10).
+
+       PROCEDURE DIVISION.
+       MAIN-PARA.
+           PERFORM GET-ENVIRONMENT
+           IF WS-REQUEST-METHOD = "GET"
+               PERFORM HANDLE-GET
+           ELSE
+               IF WS-REQUEST-METHOD = "POST"
+                   PERFORM HANDLE-POST
+               ELSE
+                   PERFORM SEND-ERROR "Unsupported HTTP Method."
+               END-IF
+           END-IF
+           GOBACK.
+
+       GET-ENVIRONMENT.
+           ACCEPT WS-REQUEST-METHOD FROM ENVIRONMENT "REQUEST_METHOD".
+           ACCEPT WS-QUERY-STRING FROM ENVIRONMENT "QUERY_STRING".
+
+       HANDLE-GET.
+           *> Example: /cgi-bin/interest_api.cgi?principal=1000&rate=0.05&time=2&account=1234567890
+           PERFORM PARSE-QUERY-STRING
+           PERFORM CALCULATE-INTEREST
+           PERFORM RECORD-TRANSACTION
+           PERFORM SEND-JSON-RESPONSE.
+
+       HANDLE-POST.
+           *> Handle POST data from standard input
+           PERFORM READ-POST-DATA
+           PERFORM PARSE-POST-DATA
+           PERFORM CALCULATE-INTEREST
+           PERFORM RECORD-TRANSACTION
+           PERFORM SEND-JSON-RESPONSE.
+
+       PARSE-QUERY-STRING.
+           *> Simple parser: assumes query string format is principal=XXX&rate=YYY&time=ZZZ&account=AAAA
+           UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
+               WS-PRINCIPAL
+               WS-RATE
+               WS-TIME
+               WS-ACCOUNT-NUMBER
+           WITH POINTER
+               11                   *> Skip "principal="
+               6                    *> Skip "rate="
+               5                    *> Skip "time="
+               9.                   *> Skip "account="
+           *> Note: This is a simplistic parser and doesn't handle URL encoding or errors.
+
+       READ-POST-DATA.
+           *> Read Content-Length to know how much to read from stdin
+           ACCEPT WS-RESPONSE FROM ENVIRONMENT "CONTENT_LENGTH".
+           *> Read the POST data (assuming it's in the format principal=XXX&rate=YYY&time=ZZZ&account=AAAA)
+           ACCEPT WS-QUERY-STRING FROM CONSOLE.
+
+       PARSE-POST-DATA.
+           PERFORM PARSE-QUERY-STRING.
+
+       CALCULATE-INTEREST.
+           *> Compound interest: A = P * (1 + r)^t
+           COMPUTE WS-INTEREST = WS-PRINCIPAL * FUNCTION EXP ( FUNCTION LOG (1.0 + WS-RATE ) * WS-TIME ) - WS-PRINCIPAL.
+
+       RECORD-TRANSACTION.
+           *> Insert the interest as a transaction (assuming 'D' for deposit)
+           STRING "INSERT INTO transactions (account_number, transaction_type, amount) "
+               "VALUES ('" WS-ACCOUNT-NUMBER "', 'D', " WS-INTEREST ");"
+               INTO WS-SQL-COMMAND.
+
+           *> Construct the shell command
+           STRING "psql -d banking_db -c \"" WS-SQL-COMMAND "\""
+               INTO WS-SHELL-COMMAND.
+
+           *> Execute the shell command
+           CALL "SYSTEM" USING WS-SHELL-COMMAND
+               RETURNING WS-RETURN-CODE.
+
+           IF WS-RETURN-CODE NOT = 0
+               PERFORM SEND-ERROR "Error recording transaction."
+               STOP RUN
+           END-IF.
+
+       SEND-JSON-RESPONSE.
+           STRING
+               "{""principal"": " WS-PRINCIPAL
+               ", ""rate"": " WS-RATE
+               ", ""time"": " WS-TIME
+               ", ""interest"": " WS-INTEREST
+               "}"
+               INTO WS-JSON-RESPONSE.
+           STRING "Content-Type: application/json" CRLF
+               "Content-Length: " FUNCTION LENGTH(WS-JSON-RESPONSE) CRLF
+               CRLF
+               WS-JSON-RESPONSE
+               INTO WS-RESPONSE.
+           DISPLAY WS-RESPONSE.
+
+       SEND-ERROR.
+           *> Display HTTP error response
+           DISPLAY "Content-Type: text/plain"
+           DISPLAY
+           DISPLAY "Error: " WS-RESPONSE.
+           STOP RUN.
