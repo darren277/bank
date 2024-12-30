@@ -23,19 +23,22 @@
            05 WS-P-TIME          PIC 9(2) VALUE 5.   *> Length of "time="
            05 WS-P-ACCOUNT       PIC 9(2) VALUE 8.   *> Length of "account="
        01  WS-TEMP.
-           05 WS-TEMP-PRINCIPAL   PIC X(20).
-           05 WS-TEMP-RATE       PIC X(20).
-           05 WS-TEMP-TIME       PIC X(20).
-           05 WS-TEMP-ACCOUNT    PIC X(20).
+           05 WS-TEMP-PRINCIPAL   PIC X(30) VALUE SPACES.
+           05 WS-TEMP-RATE        PIC X(30) VALUE SPACES.
+           05 WS-TEMP-TIME        PIC X(30) VALUE SPACES.
+           05 WS-TEMP-ACCOUNT     PIC X(30) VALUE SPACES.
        01  WS-INTEREST            PIC 9(15)V99.
        01  WS-SQL-COMMAND         PIC X(500).
+       01  WS-SQL-COMMAND-CHECK   PIC X(500).
        01  WS-SHELL-COMMAND       PIC X(600).
        01  WS-RETURN-CODE         PIC S9(4) COMP.
        01  WS-JSON-RESPONSE       PIC X(256).
-       01  WS-ACCOUNT-NUMBER      PIC X(10).
+       01  WS-ACCOUNT-NUMBER      PIC X(10) VALUE SPACES.
        01  WS-ERROR-MESSAGE       PIC X(100).
        01  CRLF                   PIC X(2) VALUE X"0D0A".
        01  WS-DOUBLE-QUOTE        PIC X(1) VALUE '"'.
+       01  WS-ACCOUNT-EXISTS      PIC X VALUE 'N'.
+       01  WS-START-POS          PIC 9(4).
 
        PROCEDURE DIVISION.
        MAIN-PARA.
@@ -60,47 +63,79 @@
            *> Example: /cgi-bin/interest_api.cgi?
            *> principal=1000&rate=0.05&time=2&account=1234567890
            PERFORM PARSE-QUERY-STRING-PARA
-           PERFORM CALCULATE-INTEREST-PARA
-           PERFORM RECORD-TRANSACTION-PARA
-           PERFORM SEND-JSON-RESPONSE-PARA.
+           PERFORM CHECK-ACCOUNT-PARA
+           IF WS-ACCOUNT-EXISTS = 'Y'
+               PERFORM CALCULATE-INTEREST-PARA
+               PERFORM RECORD-TRANSACTION-PARA
+               PERFORM SEND-JSON-RESPONSE-PARA
+           ELSE
+               MOVE "Account does not exist." TO WS-ERROR-MESSAGE
+               PERFORM SEND-ERROR-PARA
+           END-IF.
 
        HANDLE-POST-PARA.
            *> Handle POST data from standard input
            PERFORM READ-POST-DATA-PARA
            PERFORM PARSE-POST-DATA-PARA
-           PERFORM CALCULATE-INTEREST-PARA
-           PERFORM RECORD-TRANSACTION-PARA
-           PERFORM SEND-JSON-RESPONSE-PARA.
+           PERFORM CHECK-ACCOUNT-PARA
+           IF WS-ACCOUNT-EXISTS = 'Y'
+               PERFORM CALCULATE-INTEREST-PARA
+               PERFORM RECORD-TRANSACTION-PARA
+               PERFORM SEND-JSON-RESPONSE-PARA
+           ELSE
+               MOVE "Account does not exist." TO WS-ERROR-MESSAGE
+               PERFORM SEND-ERROR-PARA
+           END-IF.
 
        PARSE-QUERY-STRING-PARA.
            *> Simple parser: assumes query string format is
            *> principal=XXX&rate=YYY&time=ZZZ&account=AAAA
+           INITIALIZE WS-TEMP-PRINCIPAL WS-TEMP-RATE WS-TEMP-TIME 
+                      WS-TEMP-ACCOUNT WS-ACCOUNT-NUMBER
+           
+           *> Remove any newlines from query string
+           INSPECT WS-QUERY-STRING REPLACING ALL X"0A" BY SPACE
+           INSPECT WS-QUERY-STRING REPLACING ALL X"0D" BY SPACE
+
+           DISPLAY "Cleaned query string: '" WS-QUERY-STRING "'" CRLF.
+           
            UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
                WS-TEMP-PRINCIPAL
                WS-TEMP-RATE
                WS-TEMP-TIME
                WS-TEMP-ACCOUNT.
            
+           DISPLAY "Debug 1: Account parameter: '" WS-TEMP-ACCOUNT "'" CRLF
+
+           *> Find start position after "account="
+           COMPUTE WS-START-POS = FUNCTION LENGTH(FUNCTION TRIM(WS-TEMP-ACCOUNT))
+           SUBTRACT FUNCTION LENGTH("account=") FROM WS-START-POS
+
+           *> Extract the account number using reference modification
+           MOVE WS-TEMP-ACCOUNT(9:10) TO WS-ACCOUNT-NUMBER
+           
+           DISPLAY "Debug 3: Final account: '" WS-ACCOUNT-NUMBER "'" CRLF
+           
            *> Extract actual values by removing prefixes
            UNSTRING WS-TEMP-PRINCIPAL DELIMITED BY "=" INTO
                WS-TEMP-PRINCIPAL
-               WS-PRINCIPAL
-               WITH POINTER WS-P-PRINCIPAL.
+               WS-PRINCIPAL.
            
            UNSTRING WS-TEMP-RATE DELIMITED BY "=" INTO
                WS-TEMP-RATE
-               WS-RATE
-               WITH POINTER WS-P-RATE.
+               WS-RATE.
            
            UNSTRING WS-TEMP-TIME DELIMITED BY "=" INTO
                WS-TEMP-TIME
-               WS-TIME
-               WITH POINTER WS-P-TIME.
+               WS-TIME.
            
-           UNSTRING WS-TEMP-ACCOUNT DELIMITED BY "=" INTO
-               WS-TEMP-ACCOUNT
-               WS-ACCOUNT-NUMBER
-               WITH POINTER WS-P-ACCOUNT.
+           *> Strip any spaces from account number
+           MOVE FUNCTION TRIM(FUNCTION REVERSE(
+               FUNCTION TRIM(FUNCTION REVERSE(
+                   FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
+               TO WS-ACCOUNT-NUMBER
+           DISPLAY "Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
+           DISPLAY "Raw query string: '" WS-QUERY-STRING "'".
        *> Skip "principal="
        *> Skip "rate="
        *> Skip "time="
@@ -117,6 +152,29 @@
 
        PARSE-POST-DATA-PARA.
            PERFORM PARSE-QUERY-STRING-PARA.
+       
+       CHECK-ACCOUNT-PARA.
+           *> Construct the SQL command
+           STRING "SELECT CASE WHEN EXISTS "
+                 "(SELECT 1 FROM accounts WHERE account_number = '"
+                 WS-ACCOUNT-NUMBER
+                 "') THEN 'Y' ELSE 'N' END;"
+                 INTO WS-SQL-COMMAND-CHECK.
+           
+           STRING "PGPASSWORD=mypassword psql -U myusername -d bank -c "
+                 WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND-CHECK) WS-DOUBLE-QUOTE " -t -A"
+                 INTO WS-SHELL-COMMAND.
+           
+           DISPLAY "Executing: " WS-SHELL-COMMAND.
+
+           CALL "SYSTEM" USING WS-SHELL-COMMAND
+               RETURNING WS-RETURN-CODE.
+
+           IF WS-RETURN-CODE = 0
+               ACCEPT WS-ACCOUNT-EXISTS FROM CONSOLE
+           ELSE
+               MOVE 'N' TO WS-ACCOUNT-EXISTS
+           END-IF.
 
        CALCULATE-INTEREST-PARA.
            *> Compound interest: A = P * (1 + r)^t
