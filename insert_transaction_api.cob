@@ -125,10 +125,6 @@
               MOVE 0 TO WS-AMOUNT
            END-IF.
            
-           UNSTRING WS-TEMP-TSX-TYPE DELIMITED BY "=" INTO
-                WS-TEMP-TSX-TYPE
-                WS-TSX-TYPE.
-           
            DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
            DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
            DISPLAY "[DEBUG] Parsed account: " WS-ACCOUNT-NUMBER
