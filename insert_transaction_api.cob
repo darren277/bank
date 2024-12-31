@@ -19,11 +19,19 @@
        01  WS-QUERY-STRING        PIC X(256).
        01  WS-RESPONSE            PIC X(2048).
        01  WS-AMOUNT              PIC 9(15)V99 VALUE 0.
-       01  WS-AMOUNT-STR          PIC X(30) VALUE SPACES.
+       01  WS-AMOUNT-STR          PIC X(17). *> 15 digits + decimal point + 2 decimal places
+       01  WS-TALLY               PIC 9(4) COMP.
+       01  WS-AMOUNT-LEN          PIC 9(4) COMP.
+       01  WS-I                   PIC 9(4) COMP.
        01  WS-TSX-TYPE            PIC X(1).
        01  WS-TEMP-AMOUNT         PIC X(80).
        01  WS-TEMP-TSX-TYPE       PIC X(80).
        01  WS-TEMP-ACCOUNT        PIC X(80).
+       01  WS-TOKEN-1             PIC X(100).
+       01  WS-TOKEN-2             PIC X(100).
+       01  WS-TOKEN-3             PIC X(100).
+       01  WS-CURRENT-TOKEN       PIC X(100).
+       01  i                      PIC 9 VALUE 1.
        01  DUMMY-KEY              PIC X(50).
        01  DUMMY-VAL              PIC X(50).
        01  WS-SQL-COMMAND         PIC X(500).
@@ -94,36 +102,36 @@
 
            DISPLAY "Cleaned query string: '" WS-QUERY-STRING "'" CRLF.
            
-           UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
-                   WS-TEMP-AMOUNT
-                   WS-TEMP-TSX-TYPE
-                   WS-TEMP-ACCOUNT
-               ON OVERFLOW
-                   DISPLAY "Could not split query string by &"
-           END-UNSTRING.
+           UNSTRING WS-QUERY-STRING
+               DELIMITED BY "&"
+               INTO WS-TOKEN-1
+                    WS-TOKEN-2
+                    WS-TOKEN-3
+           END-UNSTRING
+
+           PERFORM VARYING i FROM 1 BY 1 UNTIL i > 3
+              EVALUATE i
+                WHEN 1
+                   MOVE WS-TOKEN-1 TO WS-CURRENT-TOKEN
+                   PERFORM PROCESS-TOKEN-PARA
+                WHEN 2
+                   MOVE WS-TOKEN-2 TO WS-CURRENT-TOKEN
+                   PERFORM PROCESS-TOKEN-PARA
+                WHEN 3
+                   MOVE WS-TOKEN-3 TO WS-CURRENT-TOKEN
+                   PERFORM PROCESS-TOKEN-PARA
+                WHEN OTHER
+                  EXIT PERFORM  *> or do nothing
+              END-EVALUATE
+           END-PERFORM
            
-           *> Now parse each "key=value" token separately:
+           *> Now parse each "key=value" token separately.
 
-           UNSTRING WS-TEMP-AMOUNT DELIMITED BY "="
-             INTO DUMMY-KEY
-                  WS-AMOUNT-STR
-           END-UNSTRING
-
-           UNSTRING WS-TEMP-TSX-TYPE DELIMITED BY "="
-             INTO DUMMY-KEY
-                  WS-TSX-TYPE
-           END-UNSTRING
-
-           UNSTRING WS-TEMP-ACCOUNT DELIMITED BY "="
-             INTO DUMMY-KEY
-                  WS-ACCOUNT-NUMBER
-           END-UNSTRING
-           
-           IF WS-AMOUNT-STR NUMERIC
-              MOVE WS-AMOUNT-STR TO WS-AMOUNT
-           ELSE
-              MOVE 0 TO WS-AMOUNT
-           END-IF.
+           MOVE FUNCTION TRIM(FUNCTION REVERSE(
+               FUNCTION TRIM(FUNCTION REVERSE(
+                   FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
+               TO WS-ACCOUNT-NUMBER
+           DISPLAY "Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
            
            DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
            DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
@@ -137,6 +145,27 @@
            DISPLAY "Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
            DISPLAY "Raw query string: '" WS-QUERY-STRING "'".
 
+       PROCESS-TOKEN-PARA.
+          UNSTRING WS-CURRENT-TOKEN DELIMITED BY "="
+              INTO DUMMY-KEY
+                   DUMMY-VAL
+          END-UNSTRING
+          IF DUMMY-KEY = "amount"
+               *> Initialize numeric field first
+               MOVE 0 TO WS-AMOUNT
+               *> Convert straight to numeric, which should ignore trailing spaces
+               COMPUTE WS-AMOUNT = FUNCTION NUMVAL(DUMMY-VAL) / 100
+               DISPLAY "Amount after NUMVAL: " WS-AMOUNT
+          ELSE
+              IF DUMMY-KEY = "transaction_type"
+                  MOVE DUMMY-VAL TO WS-TSX-TYPE
+              ELSE
+                  IF DUMMY-KEY = "account"
+                      MOVE DUMMY-VAL TO WS-ACCOUNT-NUMBER
+                  END-IF
+              END-IF
+          END-IF.
+       
        READ-POST-DATA-PARA.
            *> Read Content-Length to know how much to read from stdin
            ACCEPT WS-RESPONSE FROM ENVIRONMENT "CONTENT_LENGTH".
