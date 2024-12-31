@@ -18,16 +18,14 @@
        01  WS-REQUEST-METHOD      PIC X(10).
        01  WS-QUERY-STRING        PIC X(256).
        01  WS-RESPONSE            PIC X(2048).
-       01  WS-AMOUNT              PIC 9(15)V99.
-       01  WS-TSX-TYPE            PIC 9(5)V9999.
-       01  WS-POINTERS.
-           05 WS-P-AMOUNT        PIC 9(2) VALUE 7. *> Length of "amount="
-           05 WS-P-TSX-TYPE      PIC 9(2) VALUE 17. *> Length of "transaction_type="
-           05 WS-P-ACCOUNT       PIC 9(2) VALUE 8. *> Length of "account="
-       01  WS-TEMP.
-           05 WS-TEMP-AMOUNT      PIC X(30) VALUE SPACES.
-           05 WS-TEMP-TSX-TYPE    PIC X(30) VALUE SPACES.
-           05 WS-TEMP-ACCOUNT     PIC X(30) VALUE SPACES.
+       01  WS-AMOUNT              PIC 9(15)V99 VALUE 0.
+       01  WS-AMOUNT-STR          PIC X(30) VALUE SPACES.
+       01  WS-TSX-TYPE            PIC X(1).
+       01  WS-TEMP-AMOUNT         PIC X(80).
+       01  WS-TEMP-TSX-TYPE       PIC X(80).
+       01  WS-TEMP-ACCOUNT        PIC X(80).
+       01  DUMMY-KEY              PIC X(50).
+       01  DUMMY-VAL              PIC X(50).
        01  WS-SQL-COMMAND         PIC X(500).
        01  WS-SQL-COMMAND-CHECK   PIC X(500).
        01  WS-SHELL-COMMAND       PIC X(600).
@@ -89,8 +87,6 @@
        PARSE-QUERY-STRING-PARA.
            *> Simple parser: assumes query string format is
            *> amount=1000&transaction_type=D&account=1234567890
-           INITIALIZE WS-TEMP-AMOUNT WS-TEMP-TSX-TYPE
-                      WS-TEMP-ACCOUNT WS-ACCOUNT-NUMBER
            
            *> Remove any newlines from query string
            INSPECT WS-QUERY-STRING REPLACING ALL X"0A" BY SPACE
@@ -99,29 +95,43 @@
            DISPLAY "Cleaned query string: '" WS-QUERY-STRING "'" CRLF.
            
            UNSTRING WS-QUERY-STRING DELIMITED BY "&" INTO
-               WS-TEMP-AMOUNT
-               WS-TEMP-TSX-TYPE
-               WS-TEMP-ACCOUNT.
+                   WS-TEMP-AMOUNT
+                   WS-TEMP-TSX-TYPE
+                   WS-TEMP-ACCOUNT
+               ON OVERFLOW
+                   DISPLAY "Could not split query string by &"
+           END-UNSTRING.
            
-           DISPLAY "Debug 1: Account parameter: '" WS-TEMP-ACCOUNT "'" CRLF
+           *> Now parse each "key=value" token separately:
 
-           *> Find start position after "account="
-           COMPUTE WS-START-POS = FUNCTION LENGTH(FUNCTION TRIM(WS-TEMP-ACCOUNT))
-           SUBTRACT FUNCTION LENGTH("account=") FROM WS-START-POS
+           UNSTRING WS-TEMP-AMOUNT DELIMITED BY "="
+             INTO DUMMY-KEY
+                  WS-AMOUNT-STR
+           END-UNSTRING
 
-           *> Extract the account number using reference modification
-           MOVE WS-TEMP-ACCOUNT(9:10) TO WS-ACCOUNT-NUMBER
+           UNSTRING WS-TEMP-TSX-TYPE DELIMITED BY "="
+             INTO DUMMY-KEY
+                  WS-TSX-TYPE
+           END-UNSTRING
+
+           UNSTRING WS-TEMP-ACCOUNT DELIMITED BY "="
+             INTO DUMMY-KEY
+                  WS-ACCOUNT-NUMBER
+           END-UNSTRING
            
-           DISPLAY "Debug 3: Final account: '" WS-ACCOUNT-NUMBER "'" CRLF
-           
-           *> Extract actual values by removing prefixes
-           UNSTRING WS-TEMP-AMOUNT DELIMITED BY "=" INTO
-               WS-TEMP-AMOUNT
-               WS-AMOUNT.
+           IF WS-AMOUNT-STR NUMERIC
+              MOVE WS-AMOUNT-STR TO WS-AMOUNT
+           ELSE
+              MOVE 0 TO WS-AMOUNT
+           END-IF.
            
            UNSTRING WS-TEMP-TSX-TYPE DELIMITED BY "=" INTO
                 WS-TEMP-TSX-TYPE
                 WS-TSX-TYPE.
+           
+           DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
+           DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
+           DISPLAY "[DEBUG] Parsed account: " WS-ACCOUNT-NUMBER
            
            *> Strip any spaces from account number
            MOVE FUNCTION TRIM(FUNCTION REVERSE(
@@ -195,7 +205,7 @@
                 "VALUES ('"
                 WS-ACCOUNT-NUMBER
                 "', "
-                WS-TSX-TYPE
+                "'" WS-TSX-TYPE "'"
                 ", "
                 WS-AMOUNT
                 ");"
