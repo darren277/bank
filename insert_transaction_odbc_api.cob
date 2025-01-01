@@ -15,6 +15,7 @@
            01  PSQL-RESULT-RECORD    PIC X.
 
        WORKING-STORAGE SECTION.
+           01  WS-ENV-VAR-DEBUG-BOOL  PIC X.
            01  WS-REQUEST-METHOD      PIC X(10).
            01  WS-QUERY-STRING        PIC X(256).
            01  WS-RESPONSE            PIC X(2048).
@@ -48,6 +49,9 @@
            01  WS-ACCOUNT-EXISTS      PIC X VALUE 'N'.
            01  WS-START-POS          PIC 9(4).
            01  WS-PSQL-RESULT        PIC X.
+           01  WS-DEBUG-MODE          PIC X VALUE 'Y'.
+               88  DEBUG-ON           VALUE 'Y'.
+               88  DEBUG-OFF          VALUE 'N'.
 
        LINKAGE SECTION.
            01  LS-ACCOUNT-NUMBER      PIC X(10).
@@ -56,6 +60,14 @@
 
        PROCEDURE DIVISION.
        MAIN-PARA.
+           ACCEPT WS-ENV-VAR-DEBUG-BOOL FROM ENVIRONMENT "DEBUG_MODE"
+           IF WS-ENV-VAR-DEBUG-BOOL = 'Y'
+               SET DEBUG-ON TO TRUE
+               DISPLAY "[DEBUG] Debug mode enabled."
+           ELSE
+               SET DEBUG-OFF TO TRUE
+           END-IF
+           
            PERFORM GET-ENVIRONMENT-PARA
            IF WS-REQUEST-METHOD = "GET"
                PERFORM HANDLE-GET-PARA
@@ -106,8 +118,8 @@
            *> Remove any newlines from query string
            INSPECT WS-QUERY-STRING REPLACING ALL X"0A" BY SPACE
            INSPECT WS-QUERY-STRING REPLACING ALL X"0D" BY SPACE
-
-           DISPLAY "Cleaned query string: '" WS-QUERY-STRING "'" CRLF.
+           
+           IF DEBUG-ON DISPLAY "[DEBUG] Cleaned query string: '" WS-QUERY-STRING "'" CRLF END-IF
            
            UNSTRING WS-QUERY-STRING
                DELIMITED BY "&"
@@ -138,19 +150,24 @@
                FUNCTION TRIM(FUNCTION REVERSE(
                    FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
                TO WS-ACCOUNT-NUMBER
-           DISPLAY "Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
            
-           DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
-           DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
-           DISPLAY "[DEBUG] Parsed account: " WS-ACCOUNT-NUMBER
+           IF DEBUG-ON
+               DISPLAY "[DEBUG] Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
+               
+               DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
+               DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
+               DISPLAY "[DEBUG] Parsed account: " WS-ACCOUNT-NUMBER
+           END-IF
            
            *> Strip any spaces from account number
            MOVE FUNCTION TRIM(FUNCTION REVERSE(
                FUNCTION TRIM(FUNCTION REVERSE(
                    FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
                TO WS-ACCOUNT-NUMBER
-           DISPLAY "Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
-           DISPLAY "Raw query string: '" WS-QUERY-STRING "'".
+           
+           IF DEBUG-ON
+               DISPLAY "[DEBUG] Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
+               DISPLAY "[DEBUG] Raw query string: '" WS-QUERY-STRING "'".
 
        PROCESS-TOKEN-PARA.
           UNSTRING WS-CURRENT-TOKEN DELIMITED BY "="
@@ -163,7 +180,8 @@
                *> Convert straight to numeric, which should ignore trailing spaces
                *> DECIMAL DIVISION NO LONGER REQUIRED: COMPUTE WS-AMOUNT = FUNCTION NUMVAL(DUMMY-VAL) / 100
                COMPUTE WS-AMOUNT = FUNCTION NUMVAL(DUMMY-VAL)
-               DISPLAY "Amount after NUMVAL: " WS-AMOUNT
+               
+               IF DEBUG-ON DISPLAY "[DEBUG] Amount after NUMVAL: " WS-AMOUNT END-IF
           ELSE
               IF DUMMY-KEY = "transaction_type"
                   MOVE DUMMY-VAL TO WS-TSX-TYPE
@@ -197,7 +215,7 @@
                  WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND-CHECK) WS-DOUBLE-QUOTE " -t -A > ./psql_result.tmp"
                  INTO WS-SHELL-COMMAND.
            
-           DISPLAY "Executing: " WS-SHELL-COMMAND.
+           IF DEBUG-ON DISPLAY "[DEBUG] Executing: " WS-SHELL-COMMAND END-IF
 
            CALL "SYSTEM" USING WS-SHELL-COMMAND
                RETURNING WS-RETURN-CODE.
@@ -210,11 +228,12 @@
                CLOSE PSQL-RESULT-FILE
                
                *> Debug the exact content
-               DISPLAY "Raw PSQL Result: [" WS-PSQL-RESULT "]"
+               IF DEBUG-ON DISPLAY "[DEBUG] Raw PSQL Result: [" WS-PSQL-RESULT "]" END-IF
                
                *> Trim any spaces and check
                MOVE FUNCTION TRIM(WS-PSQL-RESULT) TO WS-PSQL-RESULT
-               DISPLAY "Trimmed PSQL Result: [" WS-PSQL-RESULT "]"
+               
+               IF DEBUG-ON DISPLAY "[DEBUG] Trimmed PSQL Result: [" WS-PSQL-RESULT "]" END-IF
                
                IF WS-PSQL-RESULT = "Y"
                    MOVE "Y" TO WS-ACCOUNT-EXISTS
@@ -231,9 +250,14 @@
            END-IF.
 
        RECORD-TRANSACTION-PARA.
-           DISPLAY "[DEBUG] Recording transaction..."
+           IF DEBUG-ON
+               DISPLAY "[DEBUG] Recording transaction..."
+               DISPLAY "[DEBUG] Recording transaction..."
 
-           DISPLAY "[DEBUG] Before CALL - Amount = " WS-AMOUNT
+               DISPLAY "[DEBUG] Recording transaction..."
+
+               DISPLAY "[DEBUG] Before CALL - Amount = " WS-AMOUNT
+           END-IF
 
            *> Insert the interest as a transaction
            *> Call the C function to insert transaction
@@ -248,17 +272,19 @@
                RETURNING WS-RETURN-CODE
 
            IF WS-RETURN-CODE = 0
-               DISPLAY "Transaction recorded successfully."
+               IF DEBUG-ON DISPLAY "[DEBUG] Transaction recorded successfully." END-IF
            ELSE
-               DISPLAY "Error recording transaction. Return code: " WS-RETURN-CODE
+               IF DEBUG-ON DISPLAY "[DEBUG] Error recording transaction. Return code: " WS-RETURN-CODE END-IF
            END-IF.
        
        *> TODO: Update account balance...
 
        SEND-JSON-RESPONSE-PARA.
-           DISPLAY "[DEBUG] Sending JSON response..."
-           DISPLAY "[DEBUG] Amount = " WS-AMOUNT
-           DISPLAY "[DEBUG] Transaction Type = " WS-TSX-TYPE
+           IF DEBUG-ON
+               DISPLAY "[DEBUG] Sending JSON response..."
+               DISPLAY "[DEBUG] Amount = " WS-AMOUNT
+               DISPLAY "[DEBUG] Transaction Type = " WS-TSX-TYPE
+           END-IF
 
            *> First format the amount properly
            MOVE WS-AMOUNT TO WS-FORMATTED-AMOUNT
@@ -275,7 +301,7 @@
                INTO WS-JSON-RESPONSE
            END-STRING
 
-           DISPLAY "[DEBUG] JSON Response: " WS-JSON-RESPONSE
+           IF DEBUG-ON DISPLAY "[DEBUG] JSON Response: " WS-JSON-RESPONSE END-IF
 
            STRING
                "Content-Type: application/json"
@@ -289,7 +315,8 @@
 
        SEND-ERROR-PARA.
            *> Display HTTP error response
-           DISPLAY "Content-Type: text/plain"
+           DISPLAY "Content-Type: application/json"
            DISPLAY CRLF
-           DISPLAY "Error: " WS-ERROR-MESSAGE
+           *>DISPLAY "Error: " WS-ERROR-MESSAGE
+           DISPLAY '{"error": "' WS-ERROR-MESSAGE '"}'
            STOP RUN.
