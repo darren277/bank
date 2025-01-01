@@ -47,8 +47,15 @@ void print_odbc_error(SQLHANDLE handle, SQLSMALLINT type) {
 }
 
 // Function to insert a transaction
-int insert_transaction(char* account_number, char* trans_type, unsigned char* packed_amount) {
-    double amount = packed_to_double(packed_amount, 5);
+int insert_transaction(char account_number[10], char trans_type[1], unsigned char* packed_amount) {
+    double amount = packed_to_double(packed_amount, 9);
+    fprintf(stderr, "Debug: Entering insert_transaction\n");
+    fprintf(stderr, "Debug: Received pointers - account_number=%p, trans_type=%p, amount=%p\n", 
+            (void*)account_number, (void*)trans_type, amount);
+    
+    // Add more detailed debug
+    if (account_number) fprintf(stderr, "Debug: Account number='%.10s'\n", account_number);
+    if (trans_type) fprintf(stderr, "Debug: Transaction type='%.1s'\n", trans_type);
 
     fprintf(stderr, "Debug: account_number='%s', trans_type='%s', amount=%.2f\n",
             account_number, trans_type, amount);
