@@ -67,6 +67,8 @@
            ELSE
                SET DEBUG-OFF TO TRUE
            END-IF
+
+           DISPLAY "[SPECIAL DEBUG]" WS-ENV-VAR-DEBUG-BOOL UPON SYSERR
            
            PERFORM GET-ENVIRONMENT-PARA
            IF WS-REQUEST-METHOD = "GET"
