@@ -72,3 +72,24 @@ test-odbc:
 # Retrieving Transaction History via the API
 
 # curl "http://localhost/cgi-bin/get_transactions_api.cgi?account=1234567890"
+
+
+## DOCKER ##
+
+#PG_ENV_VARS=POSTGRES_USER=$(PG_USER) POSTGRES_PASSWORD=$(PG_PASS) POSTGRES_DB=$(PG_DB)
+PG_VARS=--env PG_USER=$(PG_USER) --env PG_PASS=$(PG_PASS) --env PG_DB=$(PG_DB) --env PG_HOST=$(PG_IP) --env PG_PORT=$(PG_PORT)
+PG_VARS_BUILD=--build-arg PG_USER=$(PG_USER) --build-arg PG_PASS=$(PG_PASS) --build-arg PG_DB=$(PG_DB) --build-arg PG_HOST=$(PG_IP) --build-arg PG_PORT=$(PG_PORT)
+
+docker-subnet:
+	docker network create --subnet=$(SUBNET_CIDR) $(SUBNET_NAME)
+
+docker-psql:
+	docker run --name postgresql -e POSTGRES_USER=$(PG_USER) -e POSTGRES_PASSWORD=$(PG_PASS) --net $(SUBNET_NAME) --ip $(PG_IP) -p $(PG_PORT):$(PG_PORT) -v /data:/var/lib/postgresql/data -d postgres
+	docker start postgresql
+
+# docker build -t cobol-cgi-app . with build-args for build PG_ENV_VARS and --net $(SUBNET_NAME)
+docker-build:
+	docker build $(PG_VARS_BUILD) --build-arg CGI_PORT=$(CGI_PORT) -t cobol-cgi-app .
+
+docker-run:
+	docker run --name cobol-cgi-app --net $(SUBNET_NAME) $(PG_VARS) --ip $(CGI_IP) --env $CGI_PORT=$(CGI_PORT) -p $(EXTERNAL_PORT):$(CGI_PORT) -d cobol-cgi-app
