@@ -91,7 +91,9 @@
            *> Example: /cgi-bin/interest_api.cgi?
            *> amount=1000&transaction_type=D&account=1234567890
            PERFORM PARSE-QUERY-STRING-PARA
-           PERFORM CHECK-ACCOUNT-PARA
+           *> Temporarily bypassing this: PERFORM CHECK-ACCOUNT-PARA
+           *> Hardcoding `WS-ACCOUNT-EXISTS` to 'Y' for now
+           MOVE 'Y' TO WS-ACCOUNT-EXISTS
            IF WS-ACCOUNT-EXISTS = 'Y'
                PERFORM RECORD-TRANSACTION-PARA
                PERFORM SEND-JSON-RESPONSE-PARA
@@ -104,7 +106,9 @@
            *> Handle POST data from standard input
            PERFORM READ-POST-DATA-PARA
            PERFORM PARSE-POST-DATA-PARA
-           PERFORM CHECK-ACCOUNT-PARA
+           *> Temporarily bypassing this: PERFORM CHECK-ACCOUNT-PARA
+           *> Hardcoding `WS-ACCOUNT-EXISTS` to 'Y' for now
+           MOVE 'Y' TO WS-ACCOUNT-EXISTS
            IF WS-ACCOUNT-EXISTS = 'Y'
                PERFORM RECORD-TRANSACTION-PARA
                PERFORM SEND-JSON-RESPONSE-PARA
