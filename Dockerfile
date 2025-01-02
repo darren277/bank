@@ -48,13 +48,14 @@ RUN wget https://ftp.gnu.org/gnu/gnucobol/gnucobol-$GNU_COBOL_VERSION.tar.xz \
     && ldconfig \
     && cd .. && rm -rf gnucobol-$GNU_COBOL_VERSION gnucobol-$GNU_COBOL_VERSION.tar.xz
 
+# envsubst: command not found
+RUN apt-get update && apt-get install -y gettext-base
+
 # Configure Nginx
 RUN mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-COPY cobol_app.conf /etc/nginx/sites-available/
+COPY cobol_app.conf /etc/nginx/sites-available/cobol_app.template.conf
+RUN touch /etc/nginx/sites-available/cobol_app.conf
 RUN ln -s /etc/nginx/sites-available/cobol_app.conf /etc/nginx/sites-enabled/
-
-# sed replace ${CGI_PORT} with the actual port number
-RUN sed -i "s/\${CGI_PORT}/${CGI_PORT}/g" /etc/nginx/sites-available/cobol_app.conf
 
 # Add the CGI scripts
 RUN mkdir -p $CGI_PATH
@@ -69,9 +70,19 @@ ENV LD_LIBRARY_PATH=$CGI_PATH:$LD_LIBRARY_PATH
 # Expose port for CGI
 EXPOSE $CGI_PORT
 
+ARG GNU_LIB
+ENV GNU_LIB=$GNU_LIB
+
+ARG INTERNAL_PG_PORT
+ENV INTERNAL_PG_PORT=$INTERNAL_PG_PORT
+
+ARG DEBUG_MODE
+ENV DEBUG_MODE=$DEBUG_MODE
+
 # Set up entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Start services
 CMD ["/entrypoint.sh"]
+#CMD tail -f /dev/null
