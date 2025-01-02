@@ -49,6 +49,8 @@
            01  WS-ACCOUNT-EXISTS      PIC X VALUE 'N'.
            01  WS-START-POS          PIC 9(4).
            01  WS-PSQL-RESULT        PIC X.
+           01  WS-LENGTH-NUM       PIC 9(5) COMP-3.
+           01  WS-LENGTH-DISPLAY   PIC X(5).
            01  WS-DEBUG-MODE          PIC X VALUE 'Y'.
                88  DEBUG-ON           VALUE 'Y'.
                88  DEBUG-OFF          VALUE 'N'.
@@ -309,10 +311,13 @@
 
            IF DEBUG-ON DISPLAY "[DEBUG] JSON Response: " WS-JSON-RESPONSE END-IF
 
+           COMPUTE WS-LENGTH-NUM = FUNCTION LENGTH(WS-JSON-RESPONSE).
+           MOVE WS-LENGTH-NUM TO WS-LENGTH-DISPLAY.
+
            STRING
                "Content-Type: application/json"
                CRLF
-               "Content-Length: " FUNCTION LENGTH(WS-JSON-RESPONSE)
+               "Content-Length: " WS-LENGTH-DISPLAY
                CRLF
                CRLF
                WS-JSON-RESPONSE
