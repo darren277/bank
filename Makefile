@@ -77,19 +77,50 @@ test-odbc:
 ## DOCKER ##
 
 #PG_ENV_VARS=POSTGRES_USER=$(PG_USER) POSTGRES_PASSWORD=$(PG_PASS) POSTGRES_DB=$(PG_DB)
-PG_VARS=--env PG_USER=$(PG_USER) --env PG_PASS=$(PG_PASS) --env PG_DB=$(PG_DB) --env PG_HOST=$(PG_IP) --env PG_PORT=$(PG_PORT)
-PG_VARS_BUILD=--build-arg PG_USER=$(PG_USER) --build-arg PG_PASS=$(PG_PASS) --build-arg PG_DB=$(PG_DB) --build-arg PG_HOST=$(PG_IP) --build-arg PG_PORT=$(PG_PORT)
+PG_VARS=--env PG_USER=$(PG_USER) --env PG_PASS=$(PG_PASS) --env PG_DB=$(PG_DB) --env PG_HOST=$(PG_IP) --env INTERNAL_PG_PORT=$(INTERNAL_PG_PORT)
+PG_VARS_BUILD=--build-arg PG_USER=$(PG_USER) --build-arg PG_PASS=$(PG_PASS) --build-arg PG_DB=$(PG_DB) --build-arg PG_HOST=$(PG_IP) --build-arg INTERNAL_PG_PORT=$(INTERNAL_PG_PORT)
 
 docker-subnet:
 	docker network create --subnet=$(SUBNET_CIDR) $(SUBNET_NAME)
 
 docker-psql:
-	docker run --name postgresql -e POSTGRES_USER=$(PG_USER) -e POSTGRES_PASSWORD=$(PG_PASS) --net $(SUBNET_NAME) --ip $(PG_IP) -p $(PG_PORT):$(PG_PORT) -v /data:/var/lib/postgresql/data -d postgres
+	docker run --name postgresql -e POSTGRES_USER=$(PG_USER) -e POSTGRES_PASSWORD=$(PG_PASS) --net $(SUBNET_NAME) --ip $(PG_IP) -p $(EXTERNAL_PG_PORT):$(INTERNAL_PG_PORT) -v /data:/var/lib/postgresql/data -d postgres
 	docker start postgresql
 
-# docker build -t cobol-cgi-app . with build-args for build PG_ENV_VARS and --net $(SUBNET_NAME)
+
+# OPTIONAL: --no-cache
 docker-build:
-	docker build $(PG_VARS_BUILD) --build-arg CGI_PORT=$(CGI_PORT) -t cobol-cgi-app .
+	docker build $(PG_VARS_BUILD) --build-arg CGI_PORT=$(CGI_PORT) --build-arg GNU_LIB=$(GNU_LIB) --build-arg DEBUG_MODE=N -t cobol-cgi-app .
+
+# OPTIONAL: --no-cache
+docker-build-debug:
+	docker build $(PG_VARS_BUILD) --build-arg CGI_PORT=$(CGI_PORT) --build-arg GNU_LIB=$(GNU_LIB) --build-arg DEBUG_MODE=Y -t cobol-cgi-app .
 
 docker-run:
-	docker run --name cobol-cgi-app --net $(SUBNET_NAME) $(PG_VARS) --ip $(CGI_IP) --env $CGI_PORT=$(CGI_PORT) -p $(EXTERNAL_PORT):$(CGI_PORT) -d cobol-cgi-app
+	docker run --name cobol-cgi-app --net $(SUBNET_NAME) $(PG_VARS) --env GNU_LIB=$(GNU_LIB) --env DEBUG_MODE=N --env CGI_PORT=$(CGI_PORT) --ip $(CGI_IP) -p $(EXTERNAL_PORT):$(CGI_PORT) -d cobol-cgi-app
+
+docker-run-debug:
+	docker run --name cobol-cgi-app --net $(SUBNET_NAME) $(PG_VARS) --env GNU_LIB=$(GNU_LIB) --env DEBUG_MODE=Y --env CGI_PORT=$(CGI_PORT) --ip $(CGI_IP) -p $(EXTERNAL_PORT):$(CGI_PORT) -d cobol-cgi-app
+
+docker-debug:
+	docker exec -it cobol-cgi-app /bin/bash
+
+# docker kill cobol-cgi-app
+# docker rm cobol-cgi-app
+
+# List env vars: docker exec -it cobol-cgi-app env
+
+# odbcinst -q -s
+# isql -v BankingDB $(PG_USER) $(PG_PASS)
+docker-run-test-odbc:
+	docker exec -it cobol-cgi-app isql -v BankingDB $(PG_USER) $(PG_PASS)
+
+# docker logs -f postgresql
+
+# docker exec -it cobol-cgi-app tail -f /var/log/nginx/error.log
+
+# 1) Copy init.sql into the postgres container
+# 2) Execute init.sql inside the container as a superuser (assuming 'postgres' is a superuser in your container).
+init-db:
+	docker cp init.sql postgresql:/tmp/init.sql
+	docker exec -it postgresql psql -U postgres -f /tmp/init.sql

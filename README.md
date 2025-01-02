@@ -4,8 +4,10 @@
 
 Compile: `make build-odbc-rest-api`.
 
-Build: `docker build -t cobol-cgi-app .`.
-Run: `docker run -d -p 8080:80 cobol-cgi-app`.
+Build: `make docker-build`.
+Run: `make docker-run`.
+Build with `DEBUG_MODE=Y`: `make docker-build-debug`.
+Run with `DEBUG_MODE=Y`: `make docker-run-debug`.
 
 ### Test
 
@@ -15,7 +17,7 @@ Get balance: `curl "http://localhost:8080/api/get_balance?account=1234567890"`
 ## Database Initialization
 
 If necessary, enter the postgres container first: `docker exec -it postgresql psql -U myusername`.
-Then: `CREATE ROLE postgres WITH SUPERUSER LOGIN PASSWORD 'mypassword';`
+Then: `CREATE ROLE postgres WITH SUPERUSER LOGIN PASSWORD 'mypassword';`.
 Then: Run each of the following (just the query strings).
 
 ```shell
@@ -39,7 +41,6 @@ $ PGPASSWORD=mypassword psql -U myusername -d bank -c "INSERT INTO accounts (acc
 $ PGPASSWORD=mypassword psql -U myusername -d bank -c "INSERT INTO transactions (account_number, transaction_type, amount) VALUES ('1234567890', 'D', 80.00);"
 
 $ PGPASSWORD=mypassword psql -U myusername -d bank -c "SELECT transaction_id, transaction_type, amount, timestamp FROM transactions WHERE account_number = '1234567890';" -t -A
-
 ```
 
 export ODBCINI=/etc/odbc.ini
