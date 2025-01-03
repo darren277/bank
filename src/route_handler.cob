@@ -112,10 +112,15 @@
            IF WS-BODY-LEN > 0
               *> Here you would parse JSON from WS-RAW-BODY
               *> For example, call an external parser or subprogram
-              CALL 'JSON-PARSE-SUB' USING WS-RAW-BODY
-                                      *> Possibly more LINKAGE items
-                                      *> to retrieve the parsed fields
-                                   RETURNING WS-STATUS-CODE
+              CALL "JSON-PARSE-SUB"
+                    USING
+                      WS-RAW-BODY         *> The entire JSON string
+                      WS-STATUS-CODE      *> Will be set to "200" or "400"
+                      WS-ACCOUNT-NUM      *> PIC X(30) in main
+                      WS-TRANSACTION-TYPE *> PIC X(1) in main
+                      WS-AMOUNT           *> PIC 9(7)V99 in main
+              END-CALL
+
               IF WS-STATUS-CODE NOT = "200"
                  MOVE "400" TO WS-STATUS-CODE
                  MOVE "Bad Request" TO WS-STATUS-TEXT
