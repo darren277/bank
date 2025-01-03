@@ -5,9 +5,6 @@
        ENVIRONMENT DIVISION.
        CONFIGURATION SECTION.
        INPUT-OUTPUT SECTION.
-       FILE-CONTROL.
-           SELECT PSQL-RESULT-FILE ASSIGN TO "./psql_result.tmp"
-           ORGANIZATION IS LINE SEQUENTIAL.
 
        DATA DIVISION.
        FILE SECTION.
@@ -118,87 +115,6 @@
                MOVE "Account does not exist." TO WS-ERROR-MESSAGE
                PERFORM SEND-ERROR-PARA
            END-IF.
-
-       PARSE-QUERY-STRING-PARA.
-           *> Simple parser: assumes query string format is
-           *> amount=1000&transaction_type=D&account=1234567890
-           
-           *> Remove any newlines from query string
-           INSPECT WS-QUERY-STRING REPLACING ALL X"0A" BY SPACE
-           INSPECT WS-QUERY-STRING REPLACING ALL X"0D" BY SPACE
-           
-           IF DEBUG-ON DISPLAY "[DEBUG] Cleaned query string: '" WS-QUERY-STRING "'" CRLF END-IF
-           
-           UNSTRING WS-QUERY-STRING
-               DELIMITED BY "&"
-               INTO WS-TOKEN-1
-                    WS-TOKEN-2
-                    WS-TOKEN-3
-           END-UNSTRING
-
-           PERFORM VARYING i FROM 1 BY 1 UNTIL i > 3
-              EVALUATE i
-                WHEN 1
-                   MOVE WS-TOKEN-1 TO WS-CURRENT-TOKEN
-                   PERFORM PROCESS-TOKEN-PARA
-                WHEN 2
-                   MOVE WS-TOKEN-2 TO WS-CURRENT-TOKEN
-                   PERFORM PROCESS-TOKEN-PARA
-                WHEN 3
-                   MOVE WS-TOKEN-3 TO WS-CURRENT-TOKEN
-                   PERFORM PROCESS-TOKEN-PARA
-                WHEN OTHER
-                  EXIT PERFORM  *> or do nothing
-              END-EVALUATE
-           END-PERFORM
-           
-           *> Now parse each "key=value" token separately.
-
-           MOVE FUNCTION TRIM(FUNCTION REVERSE(
-               FUNCTION TRIM(FUNCTION REVERSE(
-                   FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
-               TO WS-ACCOUNT-NUMBER
-           
-           IF DEBUG-ON
-               DISPLAY "[DEBUG] Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
-               
-               DISPLAY "[DEBUG] Parsed amount: " WS-AMOUNT
-               DISPLAY "[DEBUG] Parsed type: " WS-TSX-TYPE
-               DISPLAY "[DEBUG] Parsed account: " WS-ACCOUNT-NUMBER
-           END-IF
-           
-           *> Strip any spaces from account number
-           MOVE FUNCTION TRIM(FUNCTION REVERSE(
-               FUNCTION TRIM(FUNCTION REVERSE(
-                   FUNCTION TRIM(WS-ACCOUNT-NUMBER))))) 
-               TO WS-ACCOUNT-NUMBER
-           
-           IF DEBUG-ON
-               DISPLAY "[DEBUG] Final account number: '" WS-ACCOUNT-NUMBER "'" CRLF
-               DISPLAY "[DEBUG] Raw query string: '" WS-QUERY-STRING "'".
-
-       PROCESS-TOKEN-PARA.
-          UNSTRING WS-CURRENT-TOKEN DELIMITED BY "="
-              INTO DUMMY-KEY
-                   DUMMY-VAL
-          END-UNSTRING
-          IF DUMMY-KEY = "amount"
-               *> Initialize numeric field first
-               MOVE 0 TO WS-AMOUNT
-               *> Convert straight to numeric, which should ignore trailing spaces
-               *> DECIMAL DIVISION NO LONGER REQUIRED: COMPUTE WS-AMOUNT = FUNCTION NUMVAL(DUMMY-VAL) / 100
-               COMPUTE WS-AMOUNT = FUNCTION NUMVAL(DUMMY-VAL)
-               
-               IF DEBUG-ON DISPLAY "[DEBUG] Amount after NUMVAL: " WS-AMOUNT END-IF
-          ELSE
-              IF DUMMY-KEY = "transaction_type"
-                  MOVE DUMMY-VAL TO WS-TSX-TYPE
-              ELSE
-                  IF DUMMY-KEY = "account"
-                      MOVE DUMMY-VAL TO WS-ACCOUNT-NUMBER
-                  END-IF
-              END-IF
-          END-IF.
        
        READ-POST-DATA-PARA.
            *> Read Content-Length to know how much to read from stdin
@@ -210,53 +126,6 @@
        PARSE-POST-DATA-PARA.
            PERFORM PARSE-QUERY-STRING-PARA.
        
-       *> TODO: Convert this to use a C interface...
-       CHECK-ACCOUNT-PARA.
-           *> Construct the SQL command
-           STRING "SELECT CASE WHEN EXISTS "
-                 "(SELECT 1 FROM accounts WHERE account_number = '"
-                 WS-ACCOUNT-NUMBER
-                 "') THEN 'Y' ELSE 'N' END;"
-                 INTO WS-SQL-COMMAND-CHECK.
-           
-           STRING "PGPASSWORD=mypassword psql -U myusername -d bank -c "
-                 WS-DOUBLE-QUOTE FUNCTION TRIM(WS-SQL-COMMAND-CHECK) WS-DOUBLE-QUOTE " -t -A > ./psql_result.tmp"
-                 INTO WS-SHELL-COMMAND.
-           
-           IF DEBUG-ON DISPLAY "[DEBUG] Executing: " WS-SHELL-COMMAND END-IF
-
-           CALL "SYSTEM" USING WS-SHELL-COMMAND
-               RETURNING WS-RETURN-CODE.
-
-           IF WS-RETURN-CODE = 0
-               OPEN INPUT PSQL-RESULT-FILE
-               READ PSQL-RESULT-FILE INTO WS-PSQL-RESULT
-                   AT END MOVE "N" TO WS-PSQL-RESULT
-               END-READ
-               CLOSE PSQL-RESULT-FILE
-               
-               *> Debug the exact content
-               IF DEBUG-ON DISPLAY "[DEBUG] Raw PSQL Result: [" WS-PSQL-RESULT "]" END-IF
-               
-               *> Trim any spaces and check
-               MOVE FUNCTION TRIM(WS-PSQL-RESULT) TO WS-PSQL-RESULT
-               
-               IF DEBUG-ON DISPLAY "[DEBUG] Trimmed PSQL Result: [" WS-PSQL-RESULT "]" END-IF
-               
-               IF WS-PSQL-RESULT = "Y"
-                   MOVE "Y" TO WS-ACCOUNT-EXISTS
-               ELSE
-                   MOVE "N" TO WS-ACCOUNT-EXISTS
-               END-IF
-               
-               *> Clean up temp file
-               *> STRING "rm ./psql_result.tmp" 
-               *>     INTO WS-SHELL-COMMAND
-               *> CALL "SYSTEM" USING WS-SHELL-COMMAND
-           ELSE
-               MOVE 'N' TO WS-ACCOUNT-EXISTS
-           END-IF.
-
        RECORD-TRANSACTION-PARA.
            IF DEBUG-ON
                DISPLAY "[DEBUG] Recording transaction..."
