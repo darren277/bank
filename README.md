@@ -1,5 +1,9 @@
 # bank
 
+## About
+
+This is a COBOL project that represents some very simple banking transactions with Postgres interactivity.
+
 ## Docker Usage
 
 Compile: `make build-odbc-rest-api`.
